@@ -16,9 +16,10 @@ public class TestController {
     @Autowired
     private Producer producer;
 
-    @GetMapping("/send")
+    @GetMapping("/test")
     public String send() {
-        producer.sendMessage();
+        // producer.sendMessage();
+        producer.initRabbit();
         return "success";
     }
 }

@@ -1295,4 +1295,163 @@ public class TestDeadLetter {
 
 ## 消息队列篇（二）
 
---- 未完待续 --- 
+### 1. 什么是 Spring-AMQP？
+<hr>
+
+Spring-AMQP 是 Spring 对 AMQP 协议的封装与扩展，它将 Spring 的核心概念应用于基于 AMQP 的消息传递解决方案中，使得开发者可以通过 Spring-AMQP 更简单方便地完成声明组件（队列，交换机等），收发消息等工作。
+
+Spring-AMQP 是一个抽象层，不依赖于特定的 AMQP Broker 的实现，这样做的好处在于，可以使用户只针对抽象层来进行开发，而不用关心底层具体的实现是什么。
+
+本篇文章内容基于 `spring-boot-starter-amqp:2.7.5` 创作。
+
+### 2. RabbitAdmin
+<hr>
+
+<font color="orange"><b>RabbitAdmin 是什么？</b></font>
+
+RabbitAdmin 是 Spring-AMQP 中的核心组件。顾名思义，RabbitAdmin 是用来管理 RabbitMQ 的，其主要功能包括：
+
+- `declareExchange`：创建交换机
+- `deleteExchange`：删除交换机
+- `declareQueue`：创建队列
+- `deleteQueue`：删除队列
+- `purgeQueue`：清空队列
+- `declareBinding`：创建绑定关系
+- `removeBinding`：删除绑定关系
+- ... ...
+
+来看一个 🌰：
+
+*Producer*
+
+```java
+@Service
+@Slf4j
+public class Producer {
+
+    final String QUEUE = "queue.test";
+    final String EXCHANGE = "exchange.test";
+    final String ROUTING_KEY = "key.test";
+
+
+    public void initRabbit() {
+        CachingConnectionFactory connectionFactory = new CachingConnectionFactory();
+        connectionFactory.setHost("127.0.0.1");
+        connectionFactory.setPort(5672);
+        RabbitAdmin rabbitAdmin = new RabbitAdmin(connectionFactory);
+        // 声明 Exchange
+        Exchange exchange = new DirectExchange(EXCHANGE, false, false);
+        // 声明 Queue
+        Queue queue = new Queue(QUEUE, false);
+        // 声明 Binding
+        Binding binding = new Binding(
+                QUEUE,
+                Binding.DestinationType.QUEUE,
+                EXCHANGE,
+                ROUTING_KEY,
+                null
+        );
+        rabbitAdmin.declareExchange(exchange);
+        rabbitAdmin.declareQueue(queue);
+        rabbitAdmin.declareBinding(binding);
+    }
+}
+```
+*TestController*
+
+```java
+@RestController
+public class TestController {
+
+    @Autowired
+    private Producer producer;
+
+    @GetMapping("/test")
+    public String test() {
+        producer.initRabbit();
+        return "success";
+    }
+}
+```
+
+启动 Spring Boot 项目，调用接口，我们可以在 RabbitMQ 管控台看到 Exchange，Queue，Binding 声明及创建成功：
+
+![](https://files.mdnice.com/user/19026/1235d0c0-3324-4d94-964f-799ce7705e34.png)
+
+除了手动调用 RabbitAdmin 方法这种方式以外，我们还可以通过 Spring Boot Config 声明式地完成队列，交换机，绑定关系的创建。
+
+Spring-AMQP 充分地发挥了 Spring Boot 的 Convention Over Configuration ，即：约定优于配置的特性。我们可以通过 Spring Boot Config 将 RabbitAdmin 交给 Spring 管理，并声明式地将队列，交换机，绑定关系注册为 Bean，Spring Boot 会为我们自动完成这些组件的创建：
+
+```java
+@Configuration
+@Slf4j
+public class RabbitConfig {
+
+    final String QUEUE = "queue.test";
+    final String EXCHANGE = "exchange.test";
+    final String ROUTING_KEY = "key.test";
+
+    /**
+     * 声明队列 queue.test
+     *
+     * @return
+     */
+    @Bean
+    public Queue testQueue() {
+        return new Queue(QUEUE);
+    }
+
+
+    /**
+     * 声明交换机 exchange.test
+     *
+     * @return
+     */
+    @Bean
+    public Exchange testExchange() {
+        return new DirectExchange(EXCHANGE);
+    }
+
+    /**
+     * 声明绑定关系
+     *
+     * @return
+     */
+    @Bean
+    public Binding testBinding() {
+        return new Binding(QUEUE,
+                Binding.DestinationType.QUEUE,
+                EXCHANGE,
+                ROUTING_KEY,
+                null);
+    }
+
+
+    @Bean
+    public ConnectionFactory connectionFactory() {
+        CachingConnectionFactory connectionFactory = new CachingConnectionFactory();
+        connectionFactory.setHost("localhost");
+        connectionFactory.setPort(5672);
+        connectionFactory.setUsername("guest");
+        connectionFactory.setPassword("guest");
+        connectionFactory.createConnection();
+        return connectionFactory;
+    }
+
+    @Bean
+    public RabbitAdmin rabbitAdmin(ConnectionFactory connectionFactory) {
+        RabbitAdmin rabbitAdmin = new RabbitAdmin(connectionFactory);
+        rabbitAdmin.setAutoStartup(true);
+        return rabbitAdmin;
+    }
+}
+```
+如上面的代码所示，我们将 RabbitAdmin 注册为一个 Bean，交给 Spring 管理；并将 Exchange，Queue，Binding 都声明为了 Bean。
+
+我们从 RabbitMQ 管控台中将队列，交换机删除后，启动 Spring Boot 项目。
+
+项目启动完成，回到 RabbitMQ 管控台，我们可以发现，Spring Boot “神奇地”创建了我们在 Spring Boot Config 中声明的交换机，队列，以及绑定关系：
+
+![](https://files.mdnice.com/user/19026/79477f96-5f7e-41cd-ad77-cfdd8399f2e0.png)
+
+<font color="orange"><b>Spring AMQP 是如何做到声明式创建 Exchang，Queue，Binding 的？</b></font>
