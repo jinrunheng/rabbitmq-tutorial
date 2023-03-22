@@ -1454,4 +1454,38 @@ public class RabbitConfig {
 
 ![](https://files.mdnice.com/user/19026/79477f96-5f7e-41cd-ad77-cfdd8399f2e0.png)
 
-<font color="orange"><b>Spring AMQP 是如何做到声明式创建 Exchang，Queue，Binding 的？</b></font>
+<font color="orange"><b>Spring AMQP 是如何做到通过 Spring Boot Config 声明式创建 Exchang，Queue，Binding 的？</b></font>
+
+查看源代码，我们可以看到 `RabbitAdmin` 实现了多个接口，其中便有 `ApplicationContextAware` 与 `InitializingBean` 接口。
+
+![](https://files.mdnice.com/user/19026/7a127485-094b-464d-b73b-85839d5df166.png)
+
+`ApplicationContextAware` 接口的作用就是获取应用上下文资源，实现了该接口的 Bean 便可以拿到 Spring 容器（ApplicationContext）。
+
+而 `InitializingBean` 则是一个 Bean 的生命周期接口，对应一个 Bean 的初始化阶段。
+
+在往期文章《Java 面试八股文之框架篇（二）》中，我向大家介绍了 Spring Bean 的完整生命周期，其中便有关于 `InitializingBean` 接口的解读。 
+
+![](https://files.mdnice.com/user/19026/20d7b434-a511-4160-b73b-b0a38b94de9e.png)
+
+该接口只有一个 `afterPropertiesSet()` 方法，当一个 Bean 实现了 `InitializingBean` 接口，那么在这个 Bean 的初始化阶段，便会自动调用 `afterPropertiesSet()` 方法，执行其初始化的逻辑。
+
+我们跟随源码，来到 `RabbitAdmin` 实现的 `afterPropertiesSet()` 方法中，便会看到方法内有如下逻辑：
+
+![](https://files.mdnice.com/user/19026/17a27151-04e4-4d19-811e-e771ad8a5402.png)
+
+`this.connectionFactory.addConnectionListener` 该方法的作用是为 `ConnectionFactory` 添加连接监听器，一旦发现有连接，即会回调 Lambda 表达式内的逻辑。
+
+进入到 `initialize()` 方法：
+
+![](https://files.mdnice.com/user/19026/c6bb7fd5-47b7-48cd-82b0-6c21cbd99463.png)
+
+由于 `RabbitAdmin` 实现了 `ApplicationContextAware` 接口，所以它可以获取到整个 Spring 上下文。在逻辑中，我们看到，它获取到了上下文中所有类型为 `Exchange`，`Queue`，`Binding` 的 Bean。
+
+![](https://files.mdnice.com/user/19026/fdb02603-ede7-4b74-9191-afb932dc4d2e.png)
+
+获取到这些 Bean 后，`RabbitAdmin` 便使用如上方式，对 Exchange，Queue，Binding 进行了声明与创建。
+
+**总结归纳**：
+1. `RabbitAdmin` 实现了 `ApplicationContextAware` 接口与 `InitializingBean` 接口
+2. `RabbitAdmin` 在初始化方法 `afterPropertiesSet()` 中，首先获取到 Spring 容器中，所有类型为 `Exchange`，`Queue`，`Binding` 的 Bean，接着对其进行声明与创建；所以，我们可以通过通 Spring Boot Config 声明式创建 Exchang，Queue，Binding 。
