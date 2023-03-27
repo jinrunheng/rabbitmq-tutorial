@@ -19,7 +19,6 @@ public class TestController {
     @GetMapping("/test")
     public String send() {
         producer.sendMessage();
-        // producer.initRabbit();
         return "success";
     }
 }

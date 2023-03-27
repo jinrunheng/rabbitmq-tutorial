@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.*;
 import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
@@ -97,9 +98,13 @@ public class RabbitConfig {
         });
         // 开启消息确认机制
         rabbitTemplate.setConfirmCallback((correlationData, ack, cause) -> {
-            log.info("correlationData:{}", correlationData);
-            log.info("ack:{}", ack);
-            log.info("cause:{}", cause);
+            if (ack) {
+                log.info("send msg to Broker success");
+                log.info("correlationData : {}", correlationData);
+            } else {
+                log.info("send msg to Broker fail");
+                log.info("cause : {}", cause);
+            }
         });
         return rabbitTemplate;
     }

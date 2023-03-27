@@ -1489,3 +1489,136 @@ public class RabbitConfig {
 **总结归纳**：
 1. `RabbitAdmin` 实现了 `ApplicationContextAware` 接口与 `InitializingBean` 接口
 2. `RabbitAdmin` 在初始化方法 `afterPropertiesSet()` 中，首先获取到 Spring 容器中，所有类型为 `Exchange`，`Queue`，`Binding` 的 Bean，接着对其进行声明与创建；所以，我们可以通过通 Spring Boot Config 声明式创建 Exchang，Queue，Binding 。
+
+### 3. RabbitTemplate
+<hr>
+
+<font color="orange"><b>RabbitTemplate 的基本使用方法</b></font>
+
+在上文中，我们了解了 Spring-AMQP 的核心组件——RabbitAdmin，知道了该如何使用 RabbitAdmin 连接配置客户端，并声明交换机，消息队列与绑定关系。本小节，我将向大家继续讲解 Spring-AMQP 另一个重要的核心组件——RabbitTemplate。
+
+RabbitTemplate 主要功能为收发消息，但是通常我们只使用其**消息发送**的功能。发送消息的方法为：
+
+- `send`
+- `convertAndSend`
+
+先来看一下 `send` 的基本使用，示例代码如下：
+
+*RabbitConfig*
+```java
+@Configuration
+@Slf4j
+public class RabbitConfig {
+
+    final String QUEUE = "queue.test";
+    final String EXCHANGE = "exchange.test";
+    final String ROUTING_KEY = "key.test";
+
+    /**
+     * 声明队列 queue.test
+     *
+     * @return
+     */
+    @Bean
+    public Queue testQueue() {
+        return new Queue(QUEUE);
+    }
+
+
+    /**
+     * 声明交换机 exchange.test
+     *
+     * @return
+     */
+    @Bean
+    public Exchange testExchange() {
+        return new DirectExchange(EXCHANGE);
+    }
+
+    /**
+     * 声明绑定关系
+     *
+     * @return
+     */
+    @Bean
+    public Binding testBinding() {
+        return new Binding(QUEUE,
+                Binding.DestinationType.QUEUE,
+                EXCHANGE,
+                ROUTING_KEY,
+                null);
+    }
+
+
+    @Bean
+    public ConnectionFactory connectionFactory() {
+        CachingConnectionFactory connectionFactory = new CachingConnectionFactory();
+        connectionFactory.setHost("localhost");
+        connectionFactory.setPort(5672);
+        connectionFactory.setUsername("guest");
+        connectionFactory.setPassword("guest");
+        return connectionFactory;
+    }
+
+    @Bean
+    public RabbitAdmin rabbitAdmin(ConnectionFactory connectionFactory) {
+        RabbitAdmin rabbitAdmin = new RabbitAdmin(connectionFactory);
+        rabbitAdmin.setAutoStartup(true);
+        return rabbitAdmin;
+    }
+
+    @Bean
+    public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
+        RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
+        return rabbitTemplate;
+    }
+}
+```
+我们使用 Spring Boot Config，将 RabbitTemplate 注册为 Bean，交给 Spring 管理。
+
+*Producer*
+```java
+@Service
+@Slf4j
+public class Producer {
+
+    final String QUEUE = "queue.test";
+    final String EXCHANGE = "exchange.test";
+    final String ROUTING_KEY = "key.test";
+
+
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
+
+    public void sendMessage() {
+        String messageToSend = "test message";
+
+        MessageProperties messageProperties = new MessageProperties();
+        //  设置单条消息 TTL 为 1 min
+        messageProperties.setExpiration("60000");
+        Message message = new Message(messageToSend.getBytes(), messageProperties);
+        CorrelationData correlationData = new CorrelationData();
+        rabbitTemplate.send(
+                EXCHANGE,
+                ROUTING_KEY,
+                message,
+                correlationData
+        );
+        log.info("message sent");
+    }
+}
+```
+在 `Producer` 类中，我们使用了 `rabbitTemplate.send` 方法，发送了一条消息。
+
+该方法的第一个参数指定了交换机的名称；第二个参数为路由键名称，第三个参数为一个 `Message` 对象：
+```java
+Message message = new Message(messageToSend.getBytes(), messageProperties);
+```
+
+构建 `Message` 的第一个参数为消息体的 `byte` 数组，第二个参数为 `MessageProperties` 对象，该对象可以指定消息携带属性。示例代码中，我们指定了消息的 TTL，即失效时间为 1 分钟；`send` 方法的最后一个参数为一个 `CorrelationData` 对象，每一个发送的消息都要配备一个 `CorrelationData` 对象，该对象内部仅有一个 id 属性，用来表示当前消息的唯一性。
+
+我们也可以手动指定这条消息唯一的 id，譬如：
+```java
+CorrelationData correlationData = new CorrelationData(user.getID().toString()));
+```
+真实的业务场景中，我们一般会通过某种方式（譬如写入数据库）记录下这个 id，用来做纠错与对账。如果不指定 id，那么生成的 `CorrelationData` 对象将使用 `UUID` 来作为唯一 id。 
