@@ -1,5 +1,6 @@
 package com.dobby.rabbitmqtutorial.controller;
 
+import com.dobby.rabbitmqtutorial.entity.Order;
 import com.dobby.rabbitmqtutorial.service.Producer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,7 +19,10 @@ public class TestController {
 
     @GetMapping("/test")
     public String send() {
-        producer.sendMessage();
+        Order order = new Order();
+        order.setOrderId("001");
+        order.setPrice(12.5);
+        producer.sendMessage(order);
         return "success";
     }
 }

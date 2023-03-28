@@ -1,10 +1,15 @@
 package com.dobby.rabbitmqtutorial.service;
 
+import com.dobby.rabbitmqtutorial.entity.Order;
+import com.dobby.rabbitmqtutorial.utils.JSONUtils;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessagePostProcessor;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -27,20 +32,25 @@ public class Producer {
     @Autowired
     private RabbitTemplate rabbitTemplate;
 
-    public void sendMessage() {
-        String messageToSend = "test message";
+//    public void sendMessage() {
+//        String messageToSend = "test message";
+//
+//        MessageProperties messageProperties = new MessageProperties();
+//        //  设置单条消息 TTL 为 1 min
+//        messageProperties.setExpiration("60000");
+//        Message message = new Message(messageToSend.getBytes(), messageProperties);
+//        CorrelationData correlationData = new CorrelationData();
+//        rabbitTemplate.send(
+//                EXCHANGE,
+//                ROUTING_KEY,
+//                message,
+//                correlationData
+//        );
+//        log.info("message sent");
+//    }
 
-        MessageProperties messageProperties = new MessageProperties();
-        //  设置单条消息 TTL 为 1 min
-        messageProperties.setExpiration("60000");
-        Message message = new Message(messageToSend.getBytes(), messageProperties);
-        CorrelationData correlationData = new CorrelationData();
-        rabbitTemplate.send(
-                EXCHANGE,
-                ROUTING_KEY,
-                message,
-                correlationData
-        );
+    public void sendMessage(Order order) {
+        rabbitTemplate.convertAndSend(EXCHANGE, ROUTING_KEY, order);
         log.info("message sent");
     }
 }

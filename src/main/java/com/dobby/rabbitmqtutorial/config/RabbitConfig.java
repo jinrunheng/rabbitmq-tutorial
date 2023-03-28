@@ -1,15 +1,18 @@
 package com.dobby.rabbitmqtutorial.config;
 
 import com.dobby.rabbitmqtutorial.delegate.MessageDelegate;
+import com.dobby.rabbitmqtutorial.entity.Order;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.logging.log4j.message.SimpleMessage;
 import org.springframework.amqp.core.*;
 import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
-import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
-import org.springframework.amqp.rabbit.listener.adapter.MessageListenerAdapter;
+import org.springframework.amqp.support.converter.ClassMapper;
+import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.amqp.support.converter.MessageConverter;
+import org.springframework.amqp.support.converter.SimpleMessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -109,21 +112,22 @@ public class RabbitConfig {
         return rabbitTemplate;
     }
 
-    @Bean
-    public SimpleMessageListenerContainer simpleMessageListenerContainer(ConnectionFactory connectionFactory) {
-        SimpleMessageListenerContainer messageListenerContainer = new SimpleMessageListenerContainer(connectionFactory);
-        messageListenerContainer.setQueueNames(QUEUE);
-        messageListenerContainer.setConcurrentConsumers(1);
-        messageListenerContainer.setMaxConcurrentConsumers(5);
-        // 消费端开启手动确认
-        messageListenerContainer.setAcknowledgeMode(AcknowledgeMode.MANUAL);
-        // 消费端限流
-        messageListenerContainer.setPrefetchCount(20);
-        MessageListenerAdapter messageListenerAdapter = new MessageListenerAdapter();
-        // 设置代理
-        messageListenerAdapter.setDelegate(messageDelegate);
-        messageListenerContainer.setMessageListener(messageListenerAdapter);
-        return messageListenerContainer;
-    }
+
+//    @Bean
+//    public SimpleMessageListenerContainer simpleMessageListenerContainer(ConnectionFactory connectionFactory) {
+//        SimpleMessageListenerContainer messageListenerContainer = new SimpleMessageListenerContainer(connectionFactory);
+//        messageListenerContainer.setQueueNames(QUEUE);
+//        messageListenerContainer.setConcurrentConsumers(1);
+//        messageListenerContainer.setMaxConcurrentConsumers(5);
+//        // 消费端开启手动确认
+//        messageListenerContainer.setAcknowledgeMode(AcknowledgeMode.MANUAL);
+//        // 消费端限流
+//        messageListenerContainer.setPrefetchCount(20);
+//        MessageListenerAdapter messageListenerAdapter = new MessageListenerAdapter();
+//        // 设置代理
+//        messageListenerAdapter.setDelegate(messageDelegate);
+//        messageListenerContainer.setMessageListener(messageListenerAdapter);
+//        return messageListenerContainer;
+//    }
 
 }
