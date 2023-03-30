@@ -32,25 +32,24 @@ public class Producer {
     @Autowired
     private RabbitTemplate rabbitTemplate;
 
-//    public void sendMessage() {
-//        String messageToSend = "test message";
-//
-//        MessageProperties messageProperties = new MessageProperties();
-//        //  设置单条消息 TTL 为 1 min
-//        messageProperties.setExpiration("60000");
-//        Message message = new Message(messageToSend.getBytes(), messageProperties);
-//        CorrelationData correlationData = new CorrelationData();
-//        rabbitTemplate.send(
-//                EXCHANGE,
-//                ROUTING_KEY,
-//                message,
-//                correlationData
-//        );
-//        log.info("message sent");
-//    }
-
-    public void sendMessage(Order order) {
-        rabbitTemplate.convertAndSend(EXCHANGE, ROUTING_KEY, order);
+    public void sendMessage() {
+        String messageToSend = "test message";
+        CorrelationData correlationData = new CorrelationData();
+        rabbitTemplate.convertAndSend(
+                EXCHANGE,
+                ROUTING_KEY,
+                messageToSend,
+                new MessagePostProcessor() {
+                    @Override
+                    public Message postProcessMessage(Message message) throws AmqpException {
+                        //  设置单条消息 TTL 为 1 min
+                        MessageProperties messageProperties = message.getMessageProperties();
+                        messageProperties.setExpiration("60000");
+                        return message;
+                    }
+                },
+                correlationData
+        );
         log.info("message sent");
     }
 }

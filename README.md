@@ -1493,7 +1493,7 @@ public class RabbitConfig {
 ### 3. RabbitTemplate
 <hr>
 
-<font color="orange"><b>RabbitTemplate 的基本使用方法</b></font>
+<font color="orange"><b>RabbitTemplate 发送消息的方法：send 与 convertAndSend 的区别是什么？</b></font>
 
 在上文中，我们了解了 Spring-AMQP 的核心组件——RabbitAdmin，知道了该如何使用 RabbitAdmin 连接配置客户端，并声明交换机，消息队列与绑定关系。本小节，我将向大家继续讲解 Spring-AMQP 另一个重要的核心组件——RabbitTemplate。
 
@@ -1502,7 +1502,7 @@ RabbitTemplate 主要功能为收发消息，但是通常我们只使用其**消
 - `send`
 - `convertAndSend`
 
-先来看一下 `send` 的基本使用，示例代码如下：
+先来看一下 `send` 方法的基本使用，示例代码如下：
 
 *RabbitConfig*
 ```java
@@ -1574,7 +1574,7 @@ public class RabbitConfig {
     }
 }
 ```
-我们使用 Spring Boot Config，将 RabbitTemplate 注册为 Bean，交给 Spring 管理。
+我们依旧使用 Spring Boot Config，将 RabbitTemplate 注册为 Bean，交给 Spring 管理。
 
 *Producer*
 ```java
@@ -1610,7 +1610,7 @@ public class Producer {
 ```
 在 `Producer` 类中，我们使用了 `rabbitTemplate.send` 方法，发送了一条消息。
 
-该方法的第一个参数指定了交换机的名称；第二个参数为路由键名称，第三个参数为一个 `Message` 对象：
+该方法（全参数重载）的第一个参数指定了交换机的名称；第二个参数为路由键名称；第三个参数接收一个 `Message` 对象：
 ```java
 Message message = new Message(messageToSend.getBytes(), messageProperties);
 ```
@@ -1619,6 +1619,95 @@ Message message = new Message(messageToSend.getBytes(), messageProperties);
 
 我们也可以手动指定这条消息唯一的 id，譬如：
 ```java
-CorrelationData correlationData = new CorrelationData(user.getID().toString()));
+CorrelationData correlationData = new CorrelationData(order.getID().toString()));
 ```
 真实的业务场景中，我们一般会通过某种方式（譬如写入数据库）记录下这个 id，用来做纠错与对账。如果不指定 id，那么生成的 `CorrelationData` 对象将使用 `UUID` 来作为唯一 id。 
+
+*TestController*
+```java
+@RestController
+public class TestController {
+
+    @Autowired
+    private Producer producer;
+
+    @GetMapping("/test")
+    public String send() {
+        producer.sendMessage();
+        return "success";
+    }
+}
+```
+
+启动 Spring Boot 项目，调用接口。我们可以在 RabbitMQ 管控台中看到，消息发送成功：
+
+![](https://files.mdnice.com/user/19026/22e3a826-474a-4878-a40a-018368cc3e67.png)
+
+而 `convertAndSend` 也是 RabbitTemplate 发送消息的方法之一。
+
+`convertAndSend` 翻译为“转换并发送”。`send` 方法接收一个 `Message` 对象，`convertAndSend` 方法则可以直接传入一个对象，该对象将会在发送到 RabbitMQ Brocker 之前，被转换为 `Message` 对象。
+
+来看示例代码：
+
+```java
+@Service
+@Slf4j
+public class Producer {
+
+    final String QUEUE = "queue.test";
+    final String EXCHANGE = "exchange.test";
+    final String ROUTING_KEY = "key.test";
+
+
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
+
+    public void sendMessage() {
+        String messageToSend = "test message";
+        CorrelationData correlationData = new CorrelationData();
+        rabbitTemplate.convertAndSend(
+                EXCHANGE,
+                ROUTING_KEY,
+                messageToSend,
+                new MessagePostProcessor() {
+                    @Override
+                    public Message postProcessMessage(Message message) throws AmqpException {
+                        //  设置单条消息 TTL 为 1 min
+                        MessageProperties messageProperties = message.getMessageProperties();
+                        messageProperties.setExpiration("60000");
+                        return message;
+                    }
+                },
+                correlationData
+        );
+        log.info("message sent");
+    }
+}
+```
+`convertAndSend` 方法（全参数重载）的第一个参数指定了交换机的名称；第二个参数为路由键名称；第三个参数接收一个 `Object` 对象，示例代码中，我传入的是一个 `String` 字符串，如果你愿意，可以传入任何对象，前提是该对象需要实现 `Serializable` 接口；第四个参数为一个 `MessagePostProcessor` 对象，`MessagePostProcessor` 的作用是让消息对象发送到 RabbitMQ Brocker 之前来操作消息对象，譬如为消息设置属性；最后一个参数为 `CorrelationData`。
+
+启动 Spring Boot 项目，调用接口。我们依旧可以在 RabbitMQ 管控台中看到，消息发送成功：
+
+
+![](https://files.mdnice.com/user/19026/0a988c0e-bd8c-4d42-acc6-0390b5d8fef4.png)
+
+那么，`convertAndSend` 方法是如何做到将对象自动转换为消息对象的呢？
+
+我们进入到 `convertAndSend` 方法：
+
+![](https://files.mdnice.com/user/19026/667756da-5564-440c-8f2e-f5ead66dc78b.png)
+
+可以看到 `convertAndSend` 的本质就是调用了 `send` 进行消息发送，不过它在内部调用了一个 `convertMessageIfNecessary` 方法，将我们传入的对象转换为了 `Message` 消息对象。
+
+进入到 `convertMessageIfNecessary` 方法：
+
+![](https://files.mdnice.com/user/19026/158f16d2-ef66-4085-9acf-ebea460dd393.png)
+
+该方法首先会判断对象是否为 `Message` 类型，如果是，则强转并返回；如果不是，则会调用 `getRequiredMessageConverter().toMessage()` 方法。
+
+`getRequiredMessageConverter()` 方法会返回一个 `MessageConverter` 对象，也就是说，`convertAndSend` 方法其实就是调用了 `MessageConverter` 对象的 `toMessage` 方法，将我们传入的对象转换为 `Message` 对象，并调用 `send` 方法进行消息发送。
+
+关于 `MessageConverter` 这一组件，我会在稍后进行详细的介绍，先来总结一下 `send` 与 `convertAndSend` 的区别：
+
+1. 首先，二者均为 RabbitTemplate 发送消息的方法。`send` 方法指定我们传入一个 `Message` 对象；而 `convertAndSend` 方法则可以直接传递一个对象，传入的对象需实现 `Serializable` 接口。
+2. `convertAndSend` 方法的本质就是调用了 `MessageConverter` 的 `toMessage` 方法，将我们传入的对象转换为 `Message` 对象，并调用 `send` 方法进行消息发送。 

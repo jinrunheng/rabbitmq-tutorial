@@ -19,10 +19,11 @@ public class TestController {
 
     @GetMapping("/test")
     public String send() {
-        Order order = new Order();
-        order.setOrderId("001");
-        order.setPrice(12.5);
-        producer.sendMessage(order);
+//        Order order = new Order();
+//        order.setOrderId("001");
+//        order.setPrice(12.5);
+//        producer.sendMessage(order);
+        producer.sendMessage();
         return "success";
     }
 }
