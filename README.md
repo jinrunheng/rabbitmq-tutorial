@@ -1710,4 +1710,136 @@ public class Producer {
 关于 `MessageConverter` 这一组件，我会在稍后进行详细的介绍，先来总结一下 `send` 与 `convertAndSend` 的区别：
 
 1. 首先，二者均为 RabbitTemplate 发送消息的方法。`send` 方法指定我们传入一个 `Message` 对象；而 `convertAndSend` 方法则可以直接传递一个对象，传入的对象需实现 `Serializable` 接口。
-2. `convertAndSend` 方法的本质就是调用了 `MessageConverter` 的 `toMessage` 方法，将我们传入的对象转换为 `Message` 对象，并调用 `send` 方法进行消息发送。 
+2. `convertAndSend` 方法的本质就是调用了 `MessageConverter` 的 `toMessage` 方法，将我们传入的对象转换为 `Message` 对象，并调用 `send` 方法进行消息发送。
+
+### 4. SimpleMessageListenerContainer
+<hr>
+
+上文中，我们学习了如何使用 RabbitAdmin 连接配置客户端，以及声明交换机，队列，绑定关系；也学习了如何使用 RabbitTemplate 发送消息。那么接下来，我们需要做的便是让消费者监听队列，并消费消息了。
+
+在学习 Spring-AMQP 的消息监听容器之前，我们不妨先思考一下，如果让你去实现消息监听，你会怎么做？
+
+首先，消息监听肯定是一个异步操作，所以，我的想法是通过异步线程池来管理异步线程，让异步线程去调用消费消息的方法；其次，为了能让异步线程持续监听消息队列，我们需要某种手段让其维持监听状态，最简单的方法就是 `while(true) Thread.sleep()`。
+
+具体代码如下：
+
+*AsyncTaskConfig*
+```java
+@Configuration
+@EnableAsync
+public class AsyncTaskConfig implements AsyncConfigurer {
+
+    @Bean
+    public Executor getAsyncExecutor() {
+        ThreadPoolTaskExecutor threadPoolTaskExecutor = new ThreadPoolTaskExecutor();
+        // 设置线程池的核心线程数
+        threadPoolTaskExecutor.setCorePoolSize(5);
+        // 设置线程池最大线程数
+        threadPoolTaskExecutor.setMaxPoolSize(10);
+        // 设置缓冲队列的长度
+        threadPoolTaskExecutor.setQueueCapacity(10);
+        // 设置线程池关闭时，是否要等待所有线程结束后再关闭
+        threadPoolTaskExecutor.setWaitForTasksToCompleteOnShutdown(true);
+        // 设置线程池等待所有线程结束的时间
+        threadPoolTaskExecutor.setAwaitTerminationSeconds(60);
+        // 设置所有线程的前缀名称
+        threadPoolTaskExecutor.setThreadNamePrefix("Rabbit-Async-");
+        threadPoolTaskExecutor.initialize();
+        return threadPoolTaskExecutor;
+    }
+
+    @Override
+    public AsyncUncaughtExceptionHandler getAsyncUncaughtExceptionHandler() {
+        return null;
+    }
+
+}
+```
+
+`AsyncTaskConfig` 为线程池配置类，我在该配置类上使用了 `@EnableAsync` 注解，该注解的作用为使线程池执行器开启异步执行功能。
+
+通常，`@EnableAsync` 注解与 `@Async` 注解合用，`@Async` 注解可以标注在方法上，也可以标注在类上。当 `@Async` 注解标注在方法上时，则指定该方法为异步执行；当标注在类上时，则指定该类上的所有方法均异步执行。当然，只有在线程池配置类中标注 `@EnableAsync` 注解，`@Async` 注解才会生效。
+
+*Consumer*
+```java
+@Service
+@Slf4j
+public class Consumer {
+
+    final String QUEUE = "queue.test";
+
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
+
+    @Async
+    public void handleMessage() {
+        try (
+                Connection connection = rabbitTemplate.getConnectionFactory().createConnection();
+                Channel channel = connection.createChannel(false);
+        ) {
+            channel.basicConsume(QUEUE,
+                    true,
+                    deliverCallback,
+                    consumerTag -> {
+                    }
+            );
+            while (true) {
+                Thread.sleep(1000);
+            }
+        } catch (Exception e) {
+            log.error("error message : {}", e.getMessage());
+        }
+    }
+
+    DeliverCallback deliverCallback = (this::handle);
+
+    private void handle(String consumerTag, Delivery message) {
+        String messageBody = new String(message.getBody());
+
+        log.info("receive message");
+        log.info("consumerTag : {}", consumerTag);
+        log.info("messageBody : {}", messageBody);
+
+    }
+}
+```
+`Consumer` 为消费者，在 `handleMessage` 方法上，我使用 `@Async` 注解，指定该方法为异步执行。方法内，我使用了 `channel.basicConsume` 来消费消息，并使用了 `while(true) Thread.sleep()` 来维持监听状态。
+
+*RabbitmqTutorialApplication*
+```java
+@SpringBootApplication
+public class RabbitmqTutorialApplication implements ApplicationRunner {
+
+    @Autowired
+    private Consumer consumer;
+
+    public static void main(String[] args) {
+        SpringApplication.run(RabbitmqTutorialApplication.class, args);
+    }
+
+
+    @Override
+    public void run(ApplicationArguments args) throws Exception {
+        consumer.handleMessage();
+    }
+}
+```
+`RabbitmqTutorialApplication` 为 Demo 工程的启动类。
+
+`RabbitConfig` 与 `Producer` 等代码不变，为了节省文章篇幅就不再赘述了。
+
+启动 Spring Boot 项目，调用接口。我们可以在控制台输出中看到，`Producer` 消息发送成功，`Consumer` 监听到了消息，并成功消费了消息；重复调用接口，`Consumer` 依旧能够监听到消息，并成功消费消息：
+```text
+2023-04-06 23:30:14.655  INFO 143 --- [nectionFactory1] c.d.r.config.RabbitConfig                : send msg to Broker success
+2023-04-06 23:30:14.655  INFO 143 --- [nectionFactory1] c.d.r.config.RabbitConfig                : correlationData : CorrelationData [id=fb01bfcb-ddc7-495b-8c6c-251911f154a7]
+2023-04-06 23:30:14.656  INFO 143 --- [pool-1-thread-4] c.d.rabbitmqtutorial.service.Consumer    : receive message
+2023-04-06 23:30:14.656  INFO 143 --- [pool-1-thread-4] c.d.rabbitmqtutorial.service.Consumer    : consumerTag : amq.ctag-0YmVWOIrKlKA85833g7VeQ
+2023-04-06 23:30:14.656  INFO 143 --- [pool-1-thread-4] c.d.rabbitmqtutorial.service.Consumer    : messageBody : test message
+2023-04-06 23:30:16.528  INFO 143 --- [nio-8080-exec-3] c.d.rabbitmqtutorial.service.Producer    : message sent
+2023-04-06 23:30:16.529  INFO 143 --- [nectionFactory1] c.d.r.config.RabbitConfig                : send msg to Broker success
+2023-04-06 23:30:16.529  INFO 143 --- [nectionFactory1] c.d.r.config.RabbitConfig                : correlationData : CorrelationData [id=9bbf5139-76a3-4609-b03b-e73b9fbe5f7d]
+2023-04-06 23:30:16.529  INFO 143 --- [pool-1-thread-5] c.d.rabbitmqtutorial.service.Consumer    : receive message
+2023-04-06 23:30:16.529  INFO 143 --- [pool-1-thread-5] c.d.rabbitmqtutorial.service.Consumer    : consumerTag : amq.ctag-0YmVWOIrKlKA85833g7VeQ
+2023-04-06 23:30:16.529  INFO 143 --- [pool-1-thread-5] c.d.rabbitmqtutorial.service.Consumer    : messageBody : test message
+```
+ 
