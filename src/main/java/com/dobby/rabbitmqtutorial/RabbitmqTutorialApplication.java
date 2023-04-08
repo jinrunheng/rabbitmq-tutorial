@@ -8,18 +8,18 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class RabbitmqTutorialApplication implements ApplicationRunner {
+public class RabbitmqTutorialApplication /*implements ApplicationRunner*/ {
 
-    @Autowired
-    private Consumer consumer;
+//    @Autowired
+//    private Consumer consumer;
 
     public static void main(String[] args) {
         SpringApplication.run(RabbitmqTutorialApplication.class, args);
     }
 
 
-    @Override
-    public void run(ApplicationArguments args) throws Exception {
-        consumer.handleMessage();
-    }
+//    @Override
+//    public void run(ApplicationArguments args) throws Exception {
+//        consumer.handleMessage();
+//    }
 }

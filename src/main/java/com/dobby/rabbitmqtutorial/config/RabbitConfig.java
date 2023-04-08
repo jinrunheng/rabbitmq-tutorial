@@ -1,16 +1,17 @@
 package com.dobby.rabbitmqtutorial.config;
 
+import com.dobby.rabbitmqtutorial.component.MyChannelAwareMessageListener;
 import com.dobby.rabbitmqtutorial.delegate.MessageDelegate;
 import com.dobby.rabbitmqtutorial.service.Consumer;
+import com.rabbitmq.client.Channel;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.core.Binding;
-import org.springframework.amqp.core.DirectExchange;
-import org.springframework.amqp.core.Exchange;
-import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.core.*;
 import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
+import org.springframework.amqp.rabbit.listener.api.ChannelAwareMessageListener;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -116,41 +117,33 @@ public class RabbitConfig {
         return rabbitTemplate;
     }
 
-//    @Bean
-//    public SimpleMessageListenerContainer simpleMessageListenerContainer(ConnectionFactory connectionFactory) {
-//        SimpleMessageListenerContainer messageListenerContainer = new SimpleMessageListenerContainer(connectionFactory);
-//        // 设置监听队列
-//        messageListenerContainer.setQueueNames(QUEUE);
-//        // 设置消费者线程数量
-//        messageListenerContainer.setConcurrentConsumers(3);
-//        // 设置最大的消费者线程数量
-//        messageListenerContainer.setMaxConcurrentConsumers(5);
-//        // 消费端开启手动确认
-//        messageListenerContainer.setAcknowledgeMode(AcknowledgeMode.MANUAL);
-//
-////        messageListenerContainer.setMessageListener(new MessageListener() {
-////            @Override
-////            public void onMessage(Message message) {
-////                log.info("receive message:{}", message);
-////            }
-////        });
-//        messageListenerContainer.setMessageListener(new ChannelAwareMessageListener() {
-//
+    @Bean
+    public SimpleMessageListenerContainer simpleMessageListenerContainer(ConnectionFactory connectionFactory) {
+        SimpleMessageListenerContainer messageListenerContainer = new SimpleMessageListenerContainer(connectionFactory);
+        // 设置监听队列
+        messageListenerContainer.setQueueNames(QUEUE);
+        // 设置消费者线程数量
+        messageListenerContainer.setConcurrentConsumers(3);
+        // 设置最大的消费者线程数量
+        messageListenerContainer.setMaxConcurrentConsumers(5);
+        // 消费端开启手动确认
+        messageListenerContainer.setAcknowledgeMode(AcknowledgeMode.MANUAL);
+
+//        messageListenerContainer.setMessageListener(new MessageListener() {
 //            @Override
-//            public void onMessage(Message message, Channel channel) throws Exception {
+//            public void onMessage(Message message) {
 //                log.info("receive message:{}", message);
-//                // 消费端手动确认
-//                channel.basicAck(message.getMessageProperties().getDeliveryTag(), false);
 //            }
 //        });
-//
-//        // 消费端限流
-//        messageListenerContainer.setPrefetchCount(20);
-//        // MessageListenerAdapter messageListenerAdapter = new MessageListenerAdapter();
-//        // 设置代理
-//        // messageListenerAdapter.setDelegate(messageDelegate);
-//        // messageListenerContainer.setMessageListener(messageListenerAdapter);
-//        return messageListenerContainer;
-//    }
+        messageListenerContainer.setMessageListener(new MyChannelAwareMessageListener());
+
+        // 消费端限流
+        messageListenerContainer.setPrefetchCount(20);
+        // MessageListenerAdapter messageListenerAdapter = new MessageListenerAdapter();
+        // 设置代理
+        // messageListenerAdapter.setDelegate(messageDelegate);
+        // messageListenerContainer.setMessageListener(messageListenerAdapter);
+        return messageListenerContainer;
+    }
 
 }

@@ -18,7 +18,7 @@ import java.util.concurrent.Executor;
  * @Version 1.0
  */
 @Configuration
-@EnableAsync
+// @EnableAsync
 public class AsyncTaskConfig implements AsyncConfigurer {
 
     @Bean

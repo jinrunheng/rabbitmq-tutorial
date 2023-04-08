@@ -24,7 +24,7 @@ public class Consumer {
     @Autowired
     private RabbitTemplate rabbitTemplate;
 
-    @Async
+    // @Async
     public void handleMessage() {
         try (
                 Connection connection = rabbitTemplate.getConnectionFactory().createConnection();
