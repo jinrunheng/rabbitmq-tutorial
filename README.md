@@ -2033,5 +2033,9 @@ RabbitMQ Brocker 接收到客户端发送的指令后，便会向客户端反馈
 
 而 `doInvokeListener` 正是调用了我们实现的 `MessageListener` 的 `onMessage` 方法。
 
-总结：
+至此为止，我们也就清楚了 SimpleMessageListenerContainer 的原理，总结：
+
+1. SimpleMessageListenerContainer 实现了 `Lifecycle` 接口，在它完成初始化后，Spring 会自动调用它的 `start` 方法；SimpleMessageListenerContainer 的父类实现了 `start` 方法，而在 `start` 方法中会调用 SimpleMessageListenerContainer 的 `doStart` 方法。
+2. `doStart` 中做了两件事，首先就是调用了 `initializeConsumers` 方法，对消费者进行初始化，生成了 `BlockingQueueConsumer`；然后，就是将 `BlockingQueueConsumer` 类型的消费者包装为实现了 `Runnable` 接口，可异步处理消息的 `AsyncMessageProcessingConsumer`，并丢进异步线程池中执行。
+3. 异步线程池会调用 `AsyncMessageProcessingConsumer` 的 `run` 方法。`run` 方法中，首先就是调用了 `initialize` 方法，`initialize` 主要的作用就是为客户端设置 Qos 以及消息订阅等操作，当 RabbitMQ 服务端收到客户端发送的指令后，会将消息推送给客户端，本质便是将消息缓存到队列中（`queue.offer()`）；第二个核心的操作就是 `mainLoop` 操作，`mainLoop` 外层通过一个 `while` 无限循环套用，它做的事情就是从队列 `queue` 拿消息（`queue.poll()`），并经过一系列操作最终传递并调用到用户实现的 `MessageListener` 的 `onMessage` 方法中。
  
