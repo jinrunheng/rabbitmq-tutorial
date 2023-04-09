@@ -1714,6 +1714,10 @@ public class Producer {
 
 ### 4. SimpleMessageListenerContainer
 <hr>
+<font color="orange"><b>SimpleMessageListenerContainer 原理</b></font>
+
+<font color="blue">1. 异步线程实现消息监听</font>
+
 
 上文中，我们学习了如何使用 RabbitAdmin 连接配置客户端，以及声明交换机，队列，绑定关系；也学习了如何使用 RabbitTemplate 发送消息。那么接下来，我们需要做的便是让消费者监听队列，并消费消息了。
 
@@ -1756,7 +1760,7 @@ public class AsyncTaskConfig implements AsyncConfigurer {
 }
 ```
 
-`AsyncTaskConfig` 为线程池配置类，我在该配置类上使用了 `@EnableAsync` 注解，该注解的作用为使线程池执行器开启异步执行功能。
+`AsyncTaskConfig` 为线程池配置类，我在该配置类上使用了 `@EnableAsync` 注解，该注解的作用是使线程池执行器开启异步执行功能。
 
 通常，`@EnableAsync` 注解与 `@Async` 注解合用，`@Async` 注解可以标注在方法上，也可以标注在类上。当 `@Async` 注解标注在方法上时，则指定该方法为异步执行；当标注在类上时，则指定该类上的所有方法均异步执行。当然，只有在线程池配置类中标注 `@EnableAsync` 注解，`@Async` 注解才会生效。
 
@@ -1824,7 +1828,7 @@ public class RabbitmqTutorialApplication implements ApplicationRunner {
     }
 }
 ```
-`RabbitmqTutorialApplication` 为 Demo 工程的启动类。
+`RabbitmqTutorialApplication` 为 Demo 工程的启动类，启动类实现了 `ApplicationRunner` 接口（或者可以实现 `CommandLineRunner` 接口），并重写了 `run` 方法，其作用为：使我们可以在启动类启动之后做一些事情，我们做的事情便是调用 `Consumer` 的异步方法 `handleMessage`，实现对消息队列的监听。
 
 `RabbitConfig` 与 `Producer` 等代码不变，为了节省文章篇幅就不再赘述了。
 
@@ -1842,4 +1846,192 @@ public class RabbitmqTutorialApplication implements ApplicationRunner {
 2023-04-06 23:30:16.529  INFO 143 --- [pool-1-thread-5] c.d.rabbitmqtutorial.service.Consumer    : consumerTag : amq.ctag-0YmVWOIrKlKA85833g7VeQ
 2023-04-06 23:30:16.529  INFO 143 --- [pool-1-thread-5] c.d.rabbitmqtutorial.service.Consumer    : messageBody : test message
 ```
+
+<font color="blue">2.SimpleMessageListenerContainer 的基本使用 </font>
+
+在学习了异步线程调用这样一种逻辑后，我们来看一下 Spring-AMQP 提供的简单消息监听容器——SimpleMessageListenerContainer。
+
+
+SimpleMessageListenerContainer 的功能十分强大，其支持：
+
+- 设置同时监听多个队列，自动启动，自动配置 RabbitMQ
+- 设置消费者数量（最大数量，最小数量，批量消费）
+- 设置消息确认模式，是否重回队列，异常捕获
+- 设置是否独占，其他消费者属性等
+- 设置具体的监听器，消息转换器等
+- 支持动态设置，运行中修改监听器配置
+- ... ...
+
+来看示例代码：
+
+*RabbitConfig*
+```java
+@Configuration
+@Slf4j
+public class RabbitConfig {
+
+    final String QUEUE = "queue.test";
+    final String EXCHANGE = "exchange.test";
+    final String ROUTING_KEY = "key.test";
+
+    // ... ...
+
+    @Bean
+    public SimpleMessageListenerContainer simpleMessageListenerContainer(ConnectionFactory connectionFactory) {
+        SimpleMessageListenerContainer messageListenerContainer = new SimpleMessageListenerContainer(connectionFactory);
+        // 设置监听队列
+        messageListenerContainer.setQueueNames(QUEUE);
+        // 设置消费者线程数量
+        messageListenerContainer.setConcurrentConsumers(3);
+        // 设置最大的消费者线程数量
+        messageListenerContainer.setMaxConcurrentConsumers(5);
+        // 消费端开启手动确认
+        messageListenerContainer.setAcknowledgeMode(AcknowledgeMode.MANUAL);
+        // 设置消息监听器
+        messageListenerContainer.setMessageListener(new MyChannelAwareMessageListener());
+
+        // 消费端限流
+        messageListenerContainer.setPrefetchCount(20);
+        return messageListenerContainer;
+    }
+
+}
+```
+
+*MyChannelAwareMessageListener*
+```java
+@Slf4j
+public class MyChannelAwareMessageListener implements ChannelAwareMessageListener {
+
+    @Override
+    public void onMessage(Message message, Channel channel) throws Exception {
+        log.info("receive message:{}", new String(message.getBody()));
+        // 消费端手动确认
+        channel.basicAck(message.getMessageProperties().getDeliveryTag(), false);
+        // 重回队列
+        // channel.basicNack(message.getMessageProperties().getDeliveryTag(), false, true);
+        // 拒绝消息
+        // channel.basicReject(message.getMessageProperties().getDeliveryTag(), true);
+    }
+}
+```
+
+我们依旧使用 Spring Boot Config 的方式，将 SimpleMessageListenerContainer 这一组件注册为 Bean，交给 Spring 管理。
+
+在代码中，我设置了 SimpleMessageListenerContainer 监听的队列，消费者线程数量，并设置了消费端手动确认，开启了消费端限流；同时，我为其设置了自定义的消息监听器：`MyChannelAwareMessageListener`，该消息监听器实现了 `ChannelAwareMessageListener` 接口。
+
+我们通常会使用两种消息监听器的实现：
+
+1. `ChannelAwareMessageListener`
+2. `MessageListener`
+
+这二者的不同点在于，`MessageListener` 只能获取到 `Message` 信息，而 `ChannelAwareMessageListener` 则可以获取到 `Message` 与 `Channel` 的信息，我们便可以通过 `Channel` 开启消费端手动确认等设置。 
+
+启动 Spring Boot 项目，调用接口。我们可以在控制台输出中看到，消息被成功监听且消费：
+```text
+2023-04-08 23:01:08.442  INFO 7713 --- [nio-8080-exec-1] c.d.rabbitmqtutorial.service.Producer    : message sent
+2023-04-08 23:01:08.444  INFO 7713 --- [enerContainer-2] c.d.r.c.MyChannelAwareMessageListener    : receive message:test message
+2023-04-08 23:01:08.450  INFO 7713 --- [nectionFactory1] c.d.r.config.RabbitConfig                : send msg to Broker success
+2023-04-08 23:01:08.450  INFO 7713 --- [nectionFactory1] c.d.r.config.RabbitConfig                : correlationData : CorrelationData [id=9a48e245-8930-4047-94c2-dbac8fdfb583]
+```
+
+那么，SimpleMessageListenerContainer 是如何做到的呢？接下来，便由我带大家一探究竟～
+
+<font color="blue">3. SimpleMessageListenerContainer 原理</font>
+
+![](https://files.mdnice.com/user/19026/4948a9f6-cea2-4ad9-924b-532fa77f0573.png)
+
+上图便是 SimpleMessageListenerContainer 继承链的 UML 类图。我们可以看到，它最终实现了 `Lifecycle` 接口。`Lifecycle` 用于对一个 Bean 生命周期的控制操作，该接口共定义了三个方法：
+```java
+public interface Lifecycle {
+    void start();
+    void stop();
+    boolean isRunning();
+}
+```
+`start/stop` 对应启动与停止，`isRunning` 用于判断组件是否正在运行；当一个 Bean 实现了 `Lifecycle` 接口时，在 Bean 初始化完毕后，Spring 会自动调用该组件实现的 `start` 方法。
+
+`SimpleMessageListenerContainer` 的 `start` 方法在父类 `AbstractMessageListenerContainer` 中实现：
+
+![](https://files.mdnice.com/user/19026/38553418-b244-4d0c-8010-0d0263e80913.png)
+
+可以看到，`AbstractMessageListenerContainer` 的 `start` 方法中，调用了 `doStart` 方法；而 `SimpleMessageListenerContainer` 对父类的 `doStart` 方法进行了重写：
+
+![](https://files.mdnice.com/user/19026/a53f064f-75cd-4b7b-820d-58d764be3b84.png)
+
+我们顺着 `doStart` 的逻辑往下走，着重地看一下我在上图中用红框圈出的代码。
+
+首先，在 `doStart` 方法内，调用了 `initializeConsumers` 方法，我们直观地理解该方法的含义为：对消费者进行初始化。
+
+进入到 `initializeConsumers` 方法：
+
+![](https://files.mdnice.com/user/19026/8c6899e0-0a07-41fc-85da-0ce7ae26936a.png)
+
+`initializeConsumers` 方法内调用了 `createBlockingQueueConsumer` 方法来创建消费者对象，消费者对象的类型为 `BlockingQueueConsumer`；`BlockingQueueConsumer` 是 Spring AMQP 定义的消费者类，它具有自己的生命周期（包含 `start` 与 `stop` 方法）。
+
+回到 `doStart` 方法。在初始化消费者对象后，代码里创建了一个存储类型为 `AsyncMessageProcessingConsumer` 的 `HashSet` 对象 `processors`；所有的 `BlockingQueueConsumer` 对象重新包装成了 `AsyncMessageProcessingConsumer` 对象，然后被 `add` 进 `processores` 中，接着调用了 `getTaskExecutor().execute(processor)` 方法。  
+
+`AsyncMessageProcessingConsumer` 翻译为 “支持异步消息处理的消费者”；它是 `SimpleMessageListenerContainer` 的一个内部类，其实现了 `Runnable` 接口；而 `getTaskExecutor()` 方法将会返回一个 `Executor` 即：异步任务执行器，异步任务执行器的 `execute` 方法需要传入一个实现 `Runnable` 接口的“任务对象”，它会直接调用实现了 `Runnable` 接口的“任务对象”的 `run` 方法。
+
+那么这段逻辑做的事情，翻译成人话就是：将 `BlockingQueueConsumer` 类型的消费者包装为实现了 `Runnable` 接口，可异步处理消息的 `AsyncMessageProcessingConsumer`，并丢进异步线程池中执行。
+
+我们进入 `AsyncMessageProcessingConsumer` 实现的 `run` 方法，直接来看代码中的核心逻辑：
+```java
+// ... ...
+try {
+		initialize();
+		while (isActive(this.consumer) || this.consumer.hasDelivery() || !this.consumer.cancelled()) {
+		    mainLoop();
+		}
+}
+// ... ...
+```
+
+核心逻辑中主要做了两个关键操作：
+
+1. `initialize`
+2. `mainLoop`
+
+首先，我们来看一下 `initialize` 初始化操作中做了什么：
+
+![](https://files.mdnice.com/user/19026/55c6e815-b201-4238-b22a-fbf62ce87b02.png)
+
+在初始化逻辑中，调用了 `BlockingQueueConsumer` 生命周期的 `start` 方法，进入 `start` 方法：
+
+![](https://files.mdnice.com/user/19026/fbffbe64-b6fa-43e5-b73f-477bf6be7d43.png)
+
+`start` 方法中，有两个主要操作；`passiveDeclarations` 方法的作用为校验监听队列是否存在，`setQosAndCreateConsumers` 方法用于为客户端设置 `Qos` 以及消息订阅。进入到 `setQosAndCreateConsumers` 方法，我们可以看到其内部调用了 `consumeFromQueue` 方法，进入到 `consumeFromQueue` 方法：
+
+![](https://files.mdnice.com/user/19026/a6328fe3-d9c8-45e1-a811-e43f23bdad87.png)
+
+该方法使用了 `channel.basicConsume` 订阅消息，它向 RabbitMQ Broker 发送指令，就相当于告诉服务器，我已经准备好了，如果监听队列有消息，你就把它推送给我～
+
+RabbitMQ Brocker 接收到客户端发送的指令后，便会向客户端反馈，它通过 `Basic.Deliver` 指令类型将消息推送给客户端，一条消息对应一个 `Basic.Deliver` 指令的反馈，客户端收到服务端返回的指令后，将通过 `ChannelN` 这个类的 `processAsync` 方法进行处理，最终，将会调用 `BlockingQueueConsumer` 内部类 `InternalConsumer` 的 `handleDelivery` 方法：
+
+![](https://files.mdnice.com/user/19026/eb98d142-cc9b-417a-a78b-d0e29c9d14ff.png)
+
+`handleDelivery` 方法的核心操作就是将**向 Brocker 发送的消息 `offer` 至 `BlockingQueueConsumer` 对象存储的队列 `queue` 中**。
+
+看完了 `initialize` 方法做的事情后，我们来看第二个核心操作 `mainLoop`。
+
+`mainLoop` 外层通过一个 `while` 无限循环套用，它做的事情就是从队列 `queue` 拿消息，并经过一系列操作最终传递到用户实现的 `MessageListener` 中。
+
+![](https://files.mdnice.com/user/19026/c7108849-8d63-4a5a-8584-a35a39cf28dc.png)
+
+`mainLoop` 的核心逻辑为 `receiveAndExecute`，`receiveAndExecute` 方法内部调用了 `doReceiveAndExecute` 方法，`doReceiveAndExecute` 有两处重要的逻辑：
+
+1. `consumer.nextMessage`
+2. `executeListener`
+
+![](https://files.mdnice.com/user/19026/0a6ed2af-e73d-4c6b-b196-ca4e987e380d.png)
+
+我们可以看到，`nextMessage` 方法的本质就是通过 `queue.poll` 来获取下一条消息的。
+
+接着，我们进入到 `executeListener` 方法，不断跟踪，可以看到，该方法最终调用了 `doInvokeListener` 方法：
+
+![](https://files.mdnice.com/user/19026/d4b9389d-0e9d-4824-a104-0a7788d99e99.png)
+
+而 `doInvokeListener` 正是调用了我们实现的 `MessageListener` 的 `onMessage` 方法。
+
+总结：
  
