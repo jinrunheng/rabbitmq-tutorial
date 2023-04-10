@@ -2038,4 +2038,78 @@ RabbitMQ Brocker 接收到客户端发送的指令后，便会向客户端反馈
 1. SimpleMessageListenerContainer 实现了 `Lifecycle` 接口，在它完成初始化后，Spring 会自动调用它的 `start` 方法；SimpleMessageListenerContainer 的父类实现了 `start` 方法，而在 `start` 方法中会调用 SimpleMessageListenerContainer 的 `doStart` 方法。
 2. `doStart` 中做了两件事，首先就是调用了 `initializeConsumers` 方法，对消费者进行初始化，生成了 `BlockingQueueConsumer`；然后，就是将 `BlockingQueueConsumer` 类型的消费者包装为实现了 `Runnable` 接口，可异步处理消息的 `AsyncMessageProcessingConsumer`，并丢进异步线程池中执行。
 3. 异步线程池会调用 `AsyncMessageProcessingConsumer` 的 `run` 方法。`run` 方法中，首先就是调用了 `initialize` 方法，`initialize` 主要的作用就是为客户端设置 Qos 以及消息订阅等操作，当 RabbitMQ 服务端收到客户端发送的指令后，会将消息推送给客户端，本质便是将消息缓存到队列中（`queue.offer()`）；第二个核心的操作就是 `mainLoop` 操作，`mainLoop` 外层通过一个 `while` 无限循环套用，它做的事情就是从队列 `queue` 拿消息（`queue.poll()`），并经过一系列操作最终传递并调用到用户实现的 `MessageListener` 的 `onMessage` 方法中。
+
+### 5. MessageListenerAdapter
+<hr>
+
+<font color="orange"><b>MessageListenerAdapter 的基本使用</b></font>
+
+MessageListenerAdapter 即：消息监听适配器。话不多说，我们先来看一下它的基本使用：
+
+*MessageDelegate*
+```java
+@Slf4j
+@Component
+public class MessageDelegate {
+
+    public void handleMessage(byte[] msgBody) {
+        log.info("invoke handleMessage,msgBody : {}", new String(msgBody));
+    }
+}
+```
+首先，我定义了一个负责消息处理的代理类 `MessageDelegate`，该类有一个方法 `handleMessage`，方法传参为 `byte` 类型的数组。对消息处理的逻辑也很简单，只是打印日志。
+
+*RabbitConfig*
+```java
+@Configuration
+@Slf4j
+public class RabbitConfig {
+    
+    final String QUEUE = "queue.test";
+    final String EXCHANGE = "exchange.test";
+    final String ROUTING_KEY = "key.test";
+    
+    @Resource
+    private MessageDelegate messageDelegate;
+    
+    // ... ...
+
+    @Bean
+    public SimpleMessageListenerContainer simpleMessageListenerContainer(ConnectionFactory connectionFactory) {
+        SimpleMessageListenerContainer messageListenerContainer = new SimpleMessageListenerContainer(connectionFactory);
+        // 设置监听队列
+        messageListenerContainer.setQueueNames(QUEUE);
+        // 设置消费者线程数量
+        messageListenerContainer.setConcurrentConsumers(3);
+        // 设置最大的消费者线程数量
+        messageListenerContainer.setMaxConcurrentConsumers(5);
+        // 消费端开启手动确认
+        messageListenerContainer.setAcknowledgeMode(AcknowledgeMode.MANUAL);
+        // 消费端限流
+        messageListenerContainer.setPrefetchCount(20);
+        // 设置代理
+        MessageListenerAdapter messageListenerAdapter = new MessageListenerAdapter();
+        messageListenerAdapter.setDelegate(messageDelegate);
+        // 设置消息监听器
+        messageListenerContainer.setMessageListener(messageListenerAdapter);
+        return messageListenerContainer;
+    }
+
+}
+```
+
+在 `RabbitConfig` 配置类中，我将 `MessageDelegate` 组件注入，并通过如上方式进行了设置；我们可以看到，`MessageListenerAdapter` 对象可以被传入到 `messageListenerContainer.setMessageListener()` 方法中，这便说明了 `MessageListenerAdapter` 本质上就是消息监听器。
+
+通过 UML 类图，也可以直观地看出，`MessageListenerAdapter` 实现了 `MessageListener` 接口：
+
+![](https://files.mdnice.com/user/19026/85bb30b5-1560-4487-a6a2-401b8b1aab10.png)
+
+启动 Spring Boot 项目，调用接口。可以在控制台输出中看到，我们自定义的 `MessageDelegate` 的 `handleMessage` 方法被调用了：
+
+```text
+2023-04-10 19:33:17.038  INFO 50607 --- [nio-8080-exec-1] c.d.rabbitmqtutorial.service.Producer    : message sent
+2023-04-10 19:33:17.040  INFO 50607 --- [enerContainer-1] c.d.r.delegate.MessageDelegate           : invoke handleMessage,msgBody : test message
+2023-04-10 19:33:17.087  INFO 50607 --- [nectionFactory1] c.d.r.config.RabbitConfig                : send msg to Broker success
+2023-04-10 19:33:17.087  INFO 50607 --- [nectionFactory1] c.d.r.config.RabbitConfig                : correlationData : CorrelationData [id=25d0b20d-4bbd-4ff7-9a54-41d9385bea83]
+```
  

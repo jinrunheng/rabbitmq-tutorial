@@ -15,4 +15,8 @@ public class MessageDelegate {
     public void handleMessage(byte[] msgBody) {
         log.info("invoke handleMessage,msgBody : {}", new String(msgBody));
     }
+
+    public void handle(byte[] msgBody) {
+        log.info("invoke handle,msgBody : {}", new String(msgBody));
+    }
 }

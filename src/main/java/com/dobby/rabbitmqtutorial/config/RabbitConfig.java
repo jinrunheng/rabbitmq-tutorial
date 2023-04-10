@@ -11,12 +11,15 @@ import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
+import org.springframework.amqp.rabbit.listener.adapter.MessageListenerAdapter;
 import org.springframework.amqp.rabbit.listener.api.ChannelAwareMessageListener;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import javax.annotation.Resource;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * @Author Dooby Kim
@@ -135,14 +138,17 @@ public class RabbitConfig {
 //                log.info("receive message:{}", message);
 //            }
 //        });
-        messageListenerContainer.setMessageListener(new MyChannelAwareMessageListener());
+        // messageListenerContainer.setMessageListener(new MyChannelAwareMessageListener());
 
         // 消费端限流
         messageListenerContainer.setPrefetchCount(20);
-        // MessageListenerAdapter messageListenerAdapter = new MessageListenerAdapter();
+        MessageListenerAdapter messageListenerAdapter = new MessageListenerAdapter();
+        Map<String, String> map = new HashMap<>(8);
+        map.put(QUEUE, "handle");
+        messageListenerAdapter.setQueueOrTagToMethodName(map);
         // 设置代理
-        // messageListenerAdapter.setDelegate(messageDelegate);
-        // messageListenerContainer.setMessageListener(messageListenerAdapter);
+        messageListenerAdapter.setDelegate(messageDelegate);
+        messageListenerContainer.setMessageListener(messageListenerAdapter);
         return messageListenerContainer;
     }
 
