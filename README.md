@@ -2087,8 +2087,8 @@ public class RabbitConfig {
         messageListenerContainer.setAcknowledgeMode(AcknowledgeMode.MANUAL);
         // 消费端限流
         messageListenerContainer.setPrefetchCount(20);
-        // 设置代理
         MessageListenerAdapter messageListenerAdapter = new MessageListenerAdapter();
+        // 设置代理
         messageListenerAdapter.setDelegate(messageDelegate);
         // 设置消息监听器
         messageListenerContainer.setMessageListener(messageListenerAdapter);
@@ -2104,7 +2104,7 @@ public class RabbitConfig {
 
 ![](https://files.mdnice.com/user/19026/85bb30b5-1560-4487-a6a2-401b8b1aab10.png)
 
-启动 Spring Boot 项目，调用接口。可以在控制台输出中看到，我们自定义的 `MessageDelegate` 的 `handleMessage` 方法被调用了：
+启动 Spring Boot 项目，调用接口。可以在控制台输出中看到，我们自定义的 `MessageDelegate` 的 `handleMessage` 方法被成功调用了：
 
 ```text
 2023-04-10 19:33:17.038  INFO 50607 --- [nio-8080-exec-1] c.d.rabbitmqtutorial.service.Producer    : message sent
@@ -2112,4 +2112,106 @@ public class RabbitConfig {
 2023-04-10 19:33:17.087  INFO 50607 --- [nectionFactory1] c.d.r.config.RabbitConfig                : send msg to Broker success
 2023-04-10 19:33:17.087  INFO 50607 --- [nectionFactory1] c.d.r.config.RabbitConfig                : correlationData : CorrelationData [id=25d0b20d-4bbd-4ff7-9a54-41d9385bea83]
 ```
+
+<font color="orange"><b>MessageListenerAdapter 原理</b></font>
+
+上文中，我介绍了 `MessageListenerAdapter` 的一个基本使用，大家可能会好奇：Spring AMQP 是如何找到并调用代理的 `handleMessage` 方法处理消息的？
+
+我们知道，`MessageListenerAdapter` 本质就是一个消息监听器。在为 `SimpleMessageListenerContainer` 设置消息监听器后，它会回调用户实现的 `onMessage` 方法来处理消息，所以，`MessageListenerAdapter` 也必然实现了 `onMessage` 方法：
+
+![](https://files.mdnice.com/user/19026/7a9bf82f-f10f-4b58-aee6-f018782f6960.png)
+
+上图所示的代码，便是 `MessageListenerAdapter` 实现的 `onMessage` 方法，其中有两处重要的逻辑，我已经使用红框圈出，第一处为 `getListenerMethodName` 方法，第二处为 `invokeListenerMethod` 方法。
+
+进入到 `getListenerMethodName` 方法：
+
+![](https://files.mdnice.com/user/19026/2f16b7dc-17d2-4f2b-ac9c-a5ff27b54002.png)
+
+我们看到，该方法首先会对 `queueOrTagToMethodName` 这个 `HashMap` 进行判断，如果该 `HashMap` 的 `size` 不为空，则会走 `if`中的逻辑；由于我们的代码中未设置该参数，所以将会走 `getDefaultListenerMethod` 的逻辑。
+
+`getDefaultListenerMethod` 方法直接返回一个 `defaultListenerMethod` 常量，这个常量便是 `handleMessage`，而 `handleMessage` 便是 `MessageListenerAdapter` 默认调用的方法名： 
+
+![](https://files.mdnice.com/user/19026/26f357a7-5f02-492f-9fbd-74d4adbbcf72.png)
+
+第一处逻辑是通过 `getListenerMethodName` 方法获取到了监听方法名；那么第二处逻辑想必大家已经猜测到其含义了，`invokeListenerMethod` 方法会通过拿到的方法名，使用 `org.springframework.util` 包下的 `MethodInvoker` 工具类的 `invoke` 方法进行回调，其本质便是使用了 Java 的反射技术。因为篇幅限制，这里我就不带着大家一步一步地进行代码跟踪了～
+
+也许有人会问，难道 `MessageListenerAdapter` 只能识别用户中介类的 `handleMessage` 方法么？我们是否可以自定义方法，让 Spring AMQP 进行调用呢？
+
+答案当然是可以的，还记得 `getListenerMethodName` 中的逻辑么？该方法首先会对 `queueOrTagToMethodName` 这个 `HashMap` 进行判断，如果 `HashMap` 的 `size` 为空才会走 `getDefaultListenerMethod` 方法，所以，我们自然是可以通过设置 `queueOrTagToMethodName`，来使 Spring AMQP 识别到我们自定义的消息监听方法，代码如下：
+
+*RabbitConfig*
+```java
+@Configuration
+@Slf4j
+public class RabbitConfig {
+    
+    final String QUEUE = "queue.test";
+    final String EXCHANGE = "exchange.test";
+    final String ROUTING_KEY = "key.test";
+    
+    @Resource
+    private MessageDelegate messageDelegate;
+    
+    // ... ...
+
+    @Bean
+    public SimpleMessageListenerContainer simpleMessageListenerContainer(ConnectionFactory connectionFactory) {
+        SimpleMessageListenerContainer messageListenerContainer = new SimpleMessageListenerContainer(connectionFactory);
+        // 设置监听队列
+        messageListenerContainer.setQueueNames(QUEUE);
+        // 设置消费者线程数量
+        messageListenerContainer.setConcurrentConsumers(3);
+        // 设置最大的消费者线程数量
+        messageListenerContainer.setMaxConcurrentConsumers(5);
+        // 消费端开启手动确认
+        messageListenerContainer.setAcknowledgeMode(AcknowledgeMode.MANUAL);
+        // 消费端限流
+        messageListenerContainer.setPrefetchCount(20);
+        MessageListenerAdapter messageListenerAdapter = new MessageListenerAdapter();
+        // 设置自定义方法名
+        Map<String, String> map = new HashMap<>(8);
+        map.put(QUEUE, "handle");
+        messageListenerAdapter.setQueueOrTagToMethodName(map);
+        // 设置代理
+        messageListenerAdapter.setDelegate(messageDelegate);
+        // 设置消息监听器
+        messageListenerContainer.setMessageListener(messageListenerAdapter);
+        return messageListenerContainer;
+    }
+
+}
+```
+
+在代码中，我通过 `MessageListenerAdapter` 对象的 `setQueueOrTagToMethodName` 方法设置了 `queueOrTagToMethodName` 这个 `HashMap`，`HashMap` 的键为队列名称，值为方法名称，示例代码中规定 `MessageListenerAdapter` 回调的监听方法名为 `handle`。
+
+*MessageDelegate*
+```java
+@Slf4j
+@Component
+public class MessageDelegate {
+
+    public void handleMessage(byte[] msgBody) {
+        log.info("invoke handleMessage,msgBody : {}", new String(msgBody));
+    }
+
+    public void handle(byte[] msgBody) {
+        log.info("invoke handle,msgBody : {}", new String(msgBody));
+    }
+}
+```
+
+启动 Spring Boot 项目，调用接口。可以在控制台输出中看到，我们自定义的 `MessageDelegate` 的 `handle` 方法被成功调用了：
+
+```text
+2023-04-11 15:40:12.566  INFO 56939 --- [nio-8080-exec-1] c.d.rabbitmqtutorial.service.Producer    : message sent
+2023-04-11 15:40:12.577  INFO 56939 --- [enerContainer-1] c.d.r.delegate.MessageDelegate           : invoke handle,msgBody : test message
+2023-04-11 15:40:12.599  INFO 56939 --- [nectionFactory1] c.d.r.config.RabbitConfig                : send msg to Broker success
+2023-04-11 15:40:12.599  INFO 56939 --- [nectionFactory1] c.d.r.config.RabbitConfig                : correlationData : CorrelationData [id=faff2552-52bd-47a2-8e90-110ee6106d5f]
+```
+
+总结：
+
+1. `MessageListenerAdapter` 本质就是一个消息监听器。
+2. 在 `MessageListenerAdapter` 实现的 `onMessage` 方法中，首先会通过 `getListenerMethodName` 来获取消息监听的方法名，默认为 `handleMessage`；在拿到方法名后，它便会通过反射，来回调方法。
+3. 我们可以通过设置 `queueOrTagToMethodName` 来自定义 `MessageListenerAdapter` 回调的监听方法名。
  
