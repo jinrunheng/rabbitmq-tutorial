@@ -1,6 +1,5 @@
 package com.dobby.rabbitmqtutorial.controller;
 
-import com.dobby.rabbitmqtutorial.entity.Order;
 import com.dobby.rabbitmqtutorial.service.Producer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;

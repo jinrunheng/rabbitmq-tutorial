@@ -33,17 +33,28 @@ public class Producer {
     private RabbitTemplate rabbitTemplate;
 
     public void sendMessage() {
-        String messageToSend = "test message";
+        // String messageToSend = "test message";
+        Order order = new Order().builder()
+                .orderId("111")
+                .price(888.8)
+                .build();
+        String json = JSONUtils.objectToJson(order);
 
-        MessageProperties messageProperties = new MessageProperties();
-        //  设置单条消息 TTL 为 1 min
-        messageProperties.setExpiration("60000");
-        Message message = new Message(messageToSend.getBytes(), messageProperties);
         CorrelationData correlationData = new CorrelationData();
-        rabbitTemplate.send(
+        rabbitTemplate.convertAndSend(
                 EXCHANGE,
                 ROUTING_KEY,
-                message,
+                json,
+                new MessagePostProcessor() {
+                    @Override
+                    public Message postProcessMessage(Message message) throws AmqpException {
+                        //  设置单条消息 TTL 为 1 min
+                        MessageProperties messageProperties = message.getMessageProperties();
+                        messageProperties.setContentType("application/json");
+                        messageProperties.setExpiration("60000");
+                        return message;
+                    }
+                },
                 correlationData
         );
         log.info("message sent");

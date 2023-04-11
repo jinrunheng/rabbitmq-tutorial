@@ -1,5 +1,6 @@
 package com.dobby.rabbitmqtutorial.delegate;
 
+import com.dobby.rabbitmqtutorial.entity.Order;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -16,7 +17,10 @@ public class MessageDelegate {
         log.info("invoke handleMessage,msgBody : {}", new String(msgBody));
     }
 
-    public void handle(byte[] msgBody) {
-        log.info("invoke handle,msgBody : {}", new String(msgBody));
+    //    public void handle(byte[] msgBody) {
+//        log.info("invoke handle,msgBody : {}", new String(msgBody));
+//    }
+    public void handle(Order order) {
+        log.info("invoke handle, msg : {}", order);
     }
 }

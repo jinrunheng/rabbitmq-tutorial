@@ -1,8 +1,6 @@
 package com.dobby.rabbitmqtutorial.entity;
 
-import lombok.Getter;
-import lombok.Setter;
-import lombok.ToString;
+import lombok.*;
 
 import java.io.Serializable;
 
@@ -14,6 +12,9 @@ import java.io.Serializable;
 @Getter
 @Setter
 @ToString
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class Order implements Serializable {
     private String orderId;
     private Double price;

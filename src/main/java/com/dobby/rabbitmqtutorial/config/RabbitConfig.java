@@ -2,6 +2,7 @@ package com.dobby.rabbitmqtutorial.config;
 
 import com.dobby.rabbitmqtutorial.component.MyChannelAwareMessageListener;
 import com.dobby.rabbitmqtutorial.delegate.MessageDelegate;
+import com.dobby.rabbitmqtutorial.entity.Order;
 import com.dobby.rabbitmqtutorial.service.Consumer;
 import com.rabbitmq.client.Channel;
 import lombok.extern.slf4j.Slf4j;
@@ -13,6 +14,10 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import org.springframework.amqp.rabbit.listener.adapter.MessageListenerAdapter;
 import org.springframework.amqp.rabbit.listener.api.ChannelAwareMessageListener;
+import org.springframework.amqp.support.converter.ClassMapper;
+import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.amqp.support.converter.MessageConversionException;
+import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -148,6 +153,20 @@ public class RabbitConfig {
         messageListenerAdapter.setQueueOrTagToMethodName(map);
         // 设置代理
         messageListenerAdapter.setDelegate(messageDelegate);
+        // 设置消息转换器
+        Jackson2JsonMessageConverter jackson2JsonMessageConverter = new Jackson2JsonMessageConverter("*");
+        jackson2JsonMessageConverter.setClassMapper(new ClassMapper() {
+            @Override
+            public void fromClass(Class<?> clazz, MessageProperties properties) {
+
+            }
+
+            @Override
+            public Class<?> toClass(MessageProperties properties) {
+                return Order.class;
+            }
+        });
+        messageListenerAdapter.setMessageConverter(jackson2JsonMessageConverter);
         messageListenerContainer.setMessageListener(messageListenerAdapter);
         return messageListenerContainer;
     }
