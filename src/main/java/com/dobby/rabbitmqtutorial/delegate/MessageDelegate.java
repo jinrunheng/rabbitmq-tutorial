@@ -13,13 +13,6 @@ import org.springframework.stereotype.Component;
 @Component
 public class MessageDelegate {
 
-    public void handleMessage(byte[] msgBody) {
-        log.info("invoke handleMessage,msgBody : {}", new String(msgBody));
-    }
-
-    //    public void handle(byte[] msgBody) {
-//        log.info("invoke handle,msgBody : {}", new String(msgBody));
-//    }
     public void handle(Order order) {
         log.info("invoke handle, msg : {}", order);
     }

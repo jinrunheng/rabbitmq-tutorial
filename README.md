@@ -2214,4 +2214,201 @@ public class MessageDelegate {
 1. `MessageListenerAdapter` 本质就是一个消息监听器。
 2. 在 `MessageListenerAdapter` 实现的 `onMessage` 方法中，首先会通过 `getListenerMethodName` 来获取消息监听的方法名，默认为 `handleMessage`；在拿到方法名后，它便会通过反射，来回调方法。
 3. 我们可以通过设置 `queueOrTagToMethodName` 来自定义 `MessageListenerAdapter` 回调的监听方法名。
- 
+
+### 6. MessageConverter
+<hr>
+
+<font color="orange"><b>Jackson2JsonMessageConverter</b></font>
+
+在讲解 `RabbitTemplate` 时，我们已经简单地了解了 `MessageConverter` 这一组件了。
+
+`RabbitTemplate` 的 `convertAndSend` 方法的本质便是调用了 `MessageConverter` 组件的 `toMessage` 方法，将我们传入的 `Object` 对象转换为 `Message` 对象，并调用 `send` 方法来进行消息发送。
+
+`MessageConverter` 翻译为“消息转换器”。在之前，我们进行收发消息时，都会使用`byte` 数组作为消息体，但是，在真实的业务场景下，我们通常需要使用 Java 对象来作为消息体，这时，我们就可以使用 `MessageConverter` 在收发消息时，对消息进行转换。
+
+`Jackson2JsonMessageConverter` 是最常用的 `MessageConverter`，顾名思义，它的作用是用来转换 JSON 格式消息的，而 JSON 又是我们做数据传输时，最常见的一种格式。
+
+代码示例 🌰：
+
+*Order*
+```java
+@Getter
+@Setter
+@ToString
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class Order implements Serializable {
+    private String orderId;
+    private Double price;
+}
+```
+
+`Order` 为订单类，是我创建的一个实体类。
+
+*JSONUtils*
+```java
+public class JSONUtils {
+    /**
+     * 将 Java 对象序列化为 JSON 字符串
+     *
+     * @return
+     */
+    public static String objectToJson(Object obj) {
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        try {
+            return objectMapper.writeValueAsString(obj);
+        } catch (JsonProcessingException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    /**
+     * 将 JSON 字符串反序列化为 Java 对象
+     *
+     * @param jsonStr
+     * @return
+     */
+    public static Object jsonToObject(String jsonStr, Class<?> clazz) {
+        ObjectMapper objectMapper = new ObjectMapper();
+        try {
+            return objectMapper.readValue(jsonStr, clazz);
+        } catch (JsonProcessingException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+}
+```
+
+`JSONUtils` 是一个可以将对象与 JSON 进行相互转换的工具类。
+
+*Producer*
+```java
+@Service
+@Slf4j
+public class Producer {
+
+    final String QUEUE = "queue.test";
+    final String EXCHANGE = "exchange.test";
+    final String ROUTING_KEY = "key.test";
+
+
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
+
+    public void sendMessage() {
+        // String messageToSend = "test message";
+        Order order = new Order().builder()
+                .orderId("111")
+                .price(888.8)
+                .build();
+        String json = JSONUtils.objectToJson(order);
+
+        CorrelationData correlationData = new CorrelationData();
+        rabbitTemplate.convertAndSend(
+                EXCHANGE,
+                ROUTING_KEY,
+                json,
+                new MessagePostProcessor() {
+                    @Override
+                    public Message postProcessMessage(Message message) throws AmqpException {
+                        //  设置单条消息 TTL 为 1 min
+                        MessageProperties messageProperties = message.getMessageProperties();
+                        messageProperties.setContentType("application/json");
+                        messageProperties.setExpiration("60000");
+                        return message;
+                    }
+                },
+                correlationData
+        );
+        log.info("message sent");
+    }
+}
+```
+
+`Producer` 为发送消息的生产者。代码中，首先，我创建了一个订单对象，并将订单对象转换为一个 JSON；然后，我将 JSON 作为消息体，并使用 `rabbitTemplate.convertAndSend` 方法进行消息发送。在方法内，我对 `MessageProperties` 的 `ContentType` 进行了设置，将其设置为 `"application/json"`，这一点是需要注意的，如果没有设置 `ContentType`，由于发送的消息体为 `String` 字符串，默认的 `ContentType` 则默认为 `"text/plain"`，消息就会被当作 `String` 字符串发送。
+
+*RabbitConfig*
+```java
+@Configuration
+@Slf4j
+public class RabbitConfig {
+    
+    final String QUEUE = "queue.test";
+    final String EXCHANGE = "exchange.test";
+    final String ROUTING_KEY = "key.test";
+    
+    @Resource
+    private MessageDelegate messageDelegate;
+    
+    // ... ...
+
+    @Bean
+    public SimpleMessageListenerContainer simpleMessageListenerContainer(ConnectionFactory connectionFactory) {
+        SimpleMessageListenerContainer messageListenerContainer = new SimpleMessageListenerContainer(connectionFactory);
+        // 设置监听队列
+        messageListenerContainer.setQueueNames(QUEUE);
+        // 设置消费者线程数量
+        messageListenerContainer.setConcurrentConsumers(3);
+        // 设置最大的消费者线程数量
+        messageListenerContainer.setMaxConcurrentConsumers(5);
+        // 消费端开启手动确认
+        messageListenerContainer.setAcknowledgeMode(AcknowledgeMode.MANUAL);
+        // 消费端限流
+        messageListenerContainer.setPrefetchCount(20);
+        MessageListenerAdapter messageListenerAdapter = new MessageListenerAdapter();
+        // 设置自定义方法名
+        Map<String, String> map = new HashMap<>(8);
+        map.put(QUEUE, "handle");
+        messageListenerAdapter.setQueueOrTagToMethodName(map);
+        // 设置代理
+        messageListenerAdapter.setDelegate(messageDelegate);
+        // 设置消息转换器
+        Jackson2JsonMessageConverter jackson2JsonMessageConverter = new Jackson2JsonMessageConverter("*");
+        jackson2JsonMessageConverter.setClassMapper(new ClassMapper() {
+            @Override
+            public void fromClass(Class<?> clazz, MessageProperties properties) {
+
+            }
+
+            @Override
+            public Class<?> toClass(MessageProperties properties) {
+                return Order.class;
+            }
+        });
+        messageListenerAdapter.setMessageConverter(jackson2JsonMessageConverter);
+        // 设置消息监听器
+        messageListenerContainer.setMessageListener(messageListenerAdapter);
+        return messageListenerContainer;
+    }
+
+}
+```
+
+在 `RabbitConfig` 配置类中，我为 `messageListenerAdapter` 设置了 `Jackson2JsonMessageConverter` 消息转换器。转换器可以通过设置 `ClassMapper` 指定 JSON 到具体类的映射。在代码中，我重写了 `ClassMapper` 的 `toClass` 方法，使 JSON 类型的消息映射为 `Order` 类型，这样我们便可以在消息监听方法中，使用 `Order` 类型来接收消息。如果不设置 `ClassMapper`，那么即默认接收消息的类型为 `Map`。
+
+*MessageDelegate*
+```java
+@Slf4j
+@Component
+public class MessageDelegate {
+
+    public void handle(Order order) {
+        log.info("invoke handle, msg : {}", order);
+    }
+}
+```
+由于我们在消息转换器中已经指定了消息从 JSON 到 `Order` 的映射，所以，消息监听方法 `handle` 的传参类型为 `Order`。
+
+启动 Spring Boot 项目，调用接口，消息收发成功，控制台输出内容如下：
+```text
+2023-04-15 21:56:26.631  INFO 99952 --- [nio-8080-exec-1] c.d.rabbitmqtutorial.service.Producer    : message sent
+2023-04-15 21:56:26.668  INFO 99952 --- [enerContainer-3] c.d.r.delegate.MessageDelegate           : invoke handle, msg : Order(orderId=111, price=888.8)
+2023-04-15 21:56:26.682  INFO 99952 --- [nectionFactory1] c.d.r.config.RabbitConfig                : send msg to Broker success
+2023-04-15 21:56:26.683  INFO 99952 --- [nectionFactory1] c.d.r.config.RabbitConfig                : correlationData : CorrelationData [id=deded32a-a28e-449e-8455-3a8f6ef5248b]
+```
+
+如果在你的项目中，需要自定义消息转换器，那便可以通过实现 `MessageConverter` 接口，重写 `toMessage` 与 `fromMessage` 方法来完成。这部分内容就不再赘述了～ 
