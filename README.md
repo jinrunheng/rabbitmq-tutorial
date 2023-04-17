@@ -1295,7 +1295,7 @@ public class TestDeadLetter {
 
 ## 消息队列篇（二）
 
-### 1. 什么是 Spring-AMQP？
+### 1. Spring-AMQP
 <hr>
 
 Spring-AMQP 是 Spring 对 AMQP 协议的封装与扩展，它将 Spring 的核心概念应用于基于 AMQP 的消息传递解决方案中，使得开发者可以通过 Spring-AMQP 更简单方便地完成声明组件（队列，交换机等），收发消息等工作。
@@ -1307,9 +1307,9 @@ Spring-AMQP 是一个抽象层，不依赖于特定的 AMQP Broker 的实现，�
 ### 2. RabbitAdmin
 <hr>
 
-<font color="orange"><b>RabbitAdmin 是什么？</b></font>
+<font color="orange"><b>RabbitAdmin 的基本使用</b></font>
 
-RabbitAdmin 是 Spring-AMQP 中的核心组件。顾名思义，RabbitAdmin 是用来管理 RabbitMQ 的，其主要功能包括：
+`RabbitAdmin` 是 Spring-AMQP 中的核心组件。顾名思义，`RabbitAdmin` 是用来连接、配置与管理 RabbitMQ 的，其主要功能包括：
 
 - `declareExchange`：创建交换机
 - `deleteExchange`：删除交换机
@@ -1378,9 +1378,9 @@ public class TestController {
 
 ![](https://files.mdnice.com/user/19026/1235d0c0-3324-4d94-964f-799ce7705e34.png)
 
-除了手动调用 RabbitAdmin 方法这种方式以外，我们还可以通过 Spring Boot Config 声明式地完成队列，交换机，绑定关系的创建。
+除了手动调用 `RabbitAdmin` 方法这种方式以外，我们还可以通过 Spring Boot Config 声明式地完成队列，交换机，绑定关系的创建。
 
-Spring-AMQP 充分地发挥了 Spring Boot 的 Convention Over Configuration ，即：约定优于配置的特性。我们可以通过 Spring Boot Config 将 RabbitAdmin 交给 Spring 管理，并声明式地将队列，交换机，绑定关系注册为 Bean，Spring Boot 会为我们自动完成这些组件的创建：
+Spring-AMQP 充分地发挥了 Spring Boot 的 Convention Over Configuration ，即：约定优于配置的特性。我们可以通过 Spring Boot Config 将 `RabbitAdmin` 交给 Spring 管理，并声明式地将队列，交换机，绑定关系注册为 Bean，Spring Boot 会为我们优雅地完成这些组件的创建：
 
 ```java
 @Configuration
@@ -1434,7 +1434,6 @@ public class RabbitConfig {
         connectionFactory.setPort(5672);
         connectionFactory.setUsername("guest");
         connectionFactory.setPassword("guest");
-        connectionFactory.createConnection();
         return connectionFactory;
     }
 
@@ -1446,7 +1445,7 @@ public class RabbitConfig {
     }
 }
 ```
-如上面的代码所示，我们将 RabbitAdmin 注册为一个 Bean，交给 Spring 管理；并将 Exchange，Queue，Binding 都声明为了 Bean。
+如上面的代码所示，我们将 `RabbitAdmin` 注册为一个 Bean，交给 Spring 管理；并将 Exchange，Queue，Binding 都声明为了 Bean。
 
 我们从 RabbitMQ 管控台中将队列，交换机删除后，启动 Spring Boot 项目。
 
@@ -1454,7 +1453,7 @@ public class RabbitConfig {
 
 ![](https://files.mdnice.com/user/19026/79477f96-5f7e-41cd-ad77-cfdd8399f2e0.png)
 
-<font color="orange"><b>Spring AMQP 是如何做到通过 Spring Boot Config 声明式创建 Exchang，Queue，Binding 的？</b></font>
+<font color="orange"><b>Spring-AMQP 是如何做到通过 Spring Boot Config 声明式创建 Exchang，Queue，Binding 的？</b></font>
 
 查看源代码，我们可以看到 `RabbitAdmin` 实现了多个接口，其中便有 `ApplicationContextAware` 与 `InitializingBean` 接口。
 
@@ -1476,7 +1475,7 @@ public class RabbitConfig {
 
 `this.connectionFactory.addConnectionListener` 该方法的作用是为 `ConnectionFactory` 添加连接监听器，一旦发现有连接，即会回调 Lambda 表达式内的逻辑。
 
-进入到 `initialize()` 方法：
+进入到上图中红框圈出的 `initialize()` 方法：
 
 ![](https://files.mdnice.com/user/19026/c6bb7fd5-47b7-48cd-82b0-6c21cbd99463.png)
 
@@ -1488,16 +1487,16 @@ public class RabbitConfig {
 
 **总结归纳**：
 1. `RabbitAdmin` 实现了 `ApplicationContextAware` 接口与 `InitializingBean` 接口
-2. `RabbitAdmin` 在初始化方法 `afterPropertiesSet()` 中，首先获取到 Spring 容器中，所有类型为 `Exchange`，`Queue`，`Binding` 的 Bean，接着对其进行声明与创建；所以，我们可以通过通 Spring Boot Config 声明式创建 Exchang，Queue，Binding 。
+2. `RabbitAdmin` 在初始化方法 `afterPropertiesSet()` 中，首先获取到 Spring 容器中，所有类型为 `Exchange`，`Queue`，`Binding` 的 Bean，接着对其进行声明与创建；所以，我们可以通过 Spring Boot Config 声明式创建 Exchang，Queue，Binding 。
 
 ### 3. RabbitTemplate
 <hr>
 
 <font color="orange"><b>RabbitTemplate 发送消息的方法：send 与 convertAndSend 的区别是什么？</b></font>
 
-在上文中，我们了解了 Spring-AMQP 的核心组件——RabbitAdmin，知道了该如何使用 RabbitAdmin 连接配置客户端，并声明交换机，消息队列与绑定关系。本小节，我将向大家继续讲解 Spring-AMQP 另一个重要的核心组件——RabbitTemplate。
+在上文中，我们了解了 Spring-AMQP 的核心组件——`RabbitAdmin`，知道了该如何使用 `RabbitAdmin` 连接配置客户端，并声明交换机，消息队列与绑定关系。本小节，我将向大家继续讲解 Spring-AMQP 另一个重要的核心组件——`RabbitTemplate`。
 
-RabbitTemplate 主要功能为收发消息，但是通常我们只使用其**消息发送**的功能。发送消息的方法为：
+`RabbitTemplate` 主要功能为收发消息，但是通常我们只使用其**消息发送**的功能。发送消息的方法为：
 
 - `send`
 - `convertAndSend`
@@ -1574,7 +1573,7 @@ public class RabbitConfig {
     }
 }
 ```
-我们依旧使用 Spring Boot Config，将 RabbitTemplate 注册为 Bean，交给 Spring 管理。
+我们依旧使用 Spring Boot Config，将 `RabbitTemplate` 注册为 Bean，交给 Spring 管理。
 
 *Producer*
 ```java
@@ -1615,7 +1614,7 @@ public class Producer {
 Message message = new Message(messageToSend.getBytes(), messageProperties);
 ```
 
-构建 `Message` 的第一个参数为消息体的 `byte` 数组，第二个参数为 `MessageProperties` 对象，该对象可以指定消息携带属性。示例代码中，我们指定了消息的 TTL，即失效时间为 1 分钟；`send` 方法的最后一个参数为一个 `CorrelationData` 对象，每一个发送的消息都要配备一个 `CorrelationData` 对象，该对象内部仅有一个 id 属性，用来表示当前消息的唯一性。
+构建 `Message` 的第一个参数为消息体，消息体是一个 `byte` 数组，第二个参数为 `MessageProperties` 对象，该对象可以指定消息携带属性。示例代码中，我们指定了消息的 TTL，即失效时间为 1 分钟；`send` 方法的最后一个参数为一个 `CorrelationData` 对象，每一个发送的消息都要配备一个 `CorrelationData` 对象，该对象内部仅有一个 id 属性，用来表示当前消息的唯一性。
 
 我们也可以手动指定这条消息唯一的 id，譬如：
 ```java
@@ -1643,7 +1642,7 @@ public class TestController {
 
 ![](https://files.mdnice.com/user/19026/22e3a826-474a-4878-a40a-018368cc3e67.png)
 
-而 `convertAndSend` 也是 RabbitTemplate 发送消息的方法之一。
+而 `convertAndSend` 也是 `RabbitTemplate` 发送消息的方法之一。
 
 `convertAndSend` 翻译为“转换并发送”。`send` 方法接收一个 `Message` 对象，`convertAndSend` 方法则可以直接传入一个对象，该对象将会在发送到 RabbitMQ Brocker 之前，被转换为 `Message` 对象。
 
@@ -1709,8 +1708,58 @@ public class Producer {
 
 关于 `MessageConverter` 这一组件，我会在稍后进行详细的介绍，先来总结一下 `send` 与 `convertAndSend` 的区别：
 
-1. 首先，二者均为 RabbitTemplate 发送消息的方法。`send` 方法指定我们传入一个 `Message` 对象；而 `convertAndSend` 方法则可以直接传递一个对象，传入的对象需实现 `Serializable` 接口。
+1. 首先，二者均为 `RabbitTemplate` 发送消息的方法。`send` 方法指定我们传入一个 `Message` 对象；而 `convertAndSend` 方法则可以直接传递一个对象，传入的对象需实现 `Serializable` 接口。
 2. `convertAndSend` 方法的本质就是调用了 `MessageConverter` 的 `toMessage` 方法，将我们传入的对象转换为 `Message` 对象，并调用 `send` 方法进行消息发送。
+
+<font color="orange"><b>使用 RabbitTemplate 开启消息确认机制与消息返回机制</b></font>
+
+关于 RabbitMQ 消息确认机制与消息返回机制的相关内容我就不再赘述了，对这两个知识点有疑问的童鞋，可以看上一篇文章《Java 面试八股文之消息队列篇（一）》进行复习～
+
+使用 `RabbitTemplate` 开启消息确认与消息返回机制的方法十分简单，我们只需在配置类中进行配置即可，方法如下：
+
+*RabbitConfig*
+```java
+@Bean
+public ConnectionFactory connectionFactory() {
+    CachingConnectionFactory connectionFactory = new CachingConnectionFactory();
+    connectionFactory.setHost("localhost");
+    connectionFactory.setPort(5672);
+    connectionFactory.setUsername("guest");
+    connectionFactory.setPassword("guest");
+    // 设置开启消息确认类型为 CORRELATED
+    connectionFactory.setPublisherConfirmType(CachingConnectionFactory.ConfirmType.CORRELATED);
+    // 设置开启消息返回
+    connectionFactory.setPublisherReturns(true);
+    return connectionFactory;
+}
+
+@Bean
+public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
+    RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
+    // 开启消息返回机制
+    rabbitTemplate.setMandatory(true);
+    rabbitTemplate.setReturnsCallback(returned -> {
+        // 说明消息不可达
+        log.info("message:{}", returned.getMessage().toString());
+        log.info("replyCode:{}", returned.getReplyCode());
+        log.info("replyText:{}", returned.getReplyText());
+        log.info("exchange:{}", returned.getExchange());
+        log.info("routingKey:{}", returned.getRoutingKey());
+    });
+    // 开启消息确认机制
+    rabbitTemplate.setConfirmCallback((correlationData, ack, cause) -> {
+        if (ack) {
+            log.info("send msg to Broker success");
+            log.info("correlationData : {}", correlationData);
+        } else {
+            log.info("send msg to Broker fail");
+            log.info("cause : {}", cause);
+        }
+    });
+    return rabbitTemplate;
+}
+```
+
 
 ### 4. SimpleMessageListenerContainer
 <hr>
@@ -1718,8 +1767,7 @@ public class Producer {
 
 <font color="blue">1. 异步线程实现消息监听</font>
 
-
-上文中，我们学习了如何使用 RabbitAdmin 连接配置客户端，以及声明交换机，队列，绑定关系；也学习了如何使用 RabbitTemplate 发送消息。那么接下来，我们需要做的便是让消费者监听队列，并消费消息了。
+上文中，我们学习了如何使用 `RabbitAdmin` 连接配置客户端，以及声明交换机，队列，绑定关系；也学习了如何使用 `RabbitTemplate` 发送消息。那么接下来，我们需要做的便是让消费者监听队列，并消费消息了。
 
 在学习 Spring-AMQP 的消息监听容器之前，我们不妨先思考一下，如果让你去实现消息监听，你会怎么做？
 
@@ -1849,10 +1897,10 @@ public class RabbitmqTutorialApplication implements ApplicationRunner {
 
 <font color="blue">2.SimpleMessageListenerContainer 的基本使用 </font>
 
-在学习了异步线程调用这样一种逻辑后，我们来看一下 Spring-AMQP 提供的简单消息监听容器——SimpleMessageListenerContainer。
+在学习了异步线程调用这样一种逻辑后，我们来看一下 Spring-AMQP 提供的简单消息监听容器——`SimpleMessageListenerContainer`。
 
 
-SimpleMessageListenerContainer 的功能十分强大，其支持：
+`SimpleMessageListenerContainer` 的功能十分强大，其支持：
 
 - 设置同时监听多个队列，自动启动，自动配置 RabbitMQ
 - 设置消费者数量（最大数量，最小数量，批量消费）
@@ -1916,9 +1964,9 @@ public class MyChannelAwareMessageListener implements ChannelAwareMessageListene
 }
 ```
 
-我们依旧使用 Spring Boot Config 的方式，将 SimpleMessageListenerContainer 这一组件注册为 Bean，交给 Spring 管理。
+我们依旧使用 Spring Boot Config 的方式，将 `SimpleMessageListenerContainer` 这一组件注册为 Bean，交给 Spring 管理。
 
-在代码中，我设置了 SimpleMessageListenerContainer 监听的队列，消费者线程数量，并设置了消费端手动确认，开启了消费端限流；同时，我为其设置了自定义的消息监听器：`MyChannelAwareMessageListener`，该消息监听器实现了 `ChannelAwareMessageListener` 接口。
+在代码中，我设置了 `SimpleMessageListenerContainer` 监听的队列，消费者线程数量，并设置了消费端手动确认，开启了消费端限流；同时，我为其设置了自定义的消息监听器：`MyChannelAwareMessageListener`，该消息监听器实现了 `ChannelAwareMessageListener` 接口。
 
 我们通常会使用两种消息监听器的实现：
 
@@ -1935,13 +1983,13 @@ public class MyChannelAwareMessageListener implements ChannelAwareMessageListene
 2023-04-08 23:01:08.450  INFO 7713 --- [nectionFactory1] c.d.r.config.RabbitConfig                : correlationData : CorrelationData [id=9a48e245-8930-4047-94c2-dbac8fdfb583]
 ```
 
-那么，SimpleMessageListenerContainer 是如何做到的呢？接下来，便由我带大家一探究竟～
+那么，`SimpleMessageListenerContainer` 是如何做到的呢？接下来，便由我带大家一探究竟～
 
 <font color="blue">3. SimpleMessageListenerContainer 原理</font>
 
 ![](https://files.mdnice.com/user/19026/4948a9f6-cea2-4ad9-924b-532fa77f0573.png)
 
-上图便是 SimpleMessageListenerContainer 继承链的 UML 类图。我们可以看到，它最终实现了 `Lifecycle` 接口。`Lifecycle` 用于对一个 Bean 生命周期的控制操作，该接口共定义了三个方法：
+上图便是 `SimpleMessageListenerContainer` 继承链的 UML 类图。我们可以看到，它最终实现了 `Lifecycle` 接口。`Lifecycle` 用于对一个 Bean 生命周期的控制操作，该接口共定义了三个方法：
 ```java
 public interface Lifecycle {
     void start();
@@ -2033,18 +2081,19 @@ RabbitMQ Brocker 接收到客户端发送的指令后，便会向客户端反馈
 
 而 `doInvokeListener` 正是调用了我们实现的 `MessageListener` 的 `onMessage` 方法。
 
-至此为止，我们也就清楚了 SimpleMessageListenerContainer 的原理，总结：
+至此为止，我们也就清楚了 `SimpleMessageListenerContainer` 的原理，总结：
 
-1. SimpleMessageListenerContainer 实现了 `Lifecycle` 接口，在它完成初始化后，Spring 会自动调用它的 `start` 方法；SimpleMessageListenerContainer 的父类实现了 `start` 方法，而在 `start` 方法中会调用 SimpleMessageListenerContainer 的 `doStart` 方法。
+1. `SimpleMessageListenerContainer` 实现了 `Lifecycle` 接口，在它完成初始化后，Spring 会自动调用它的 `start` 方法；`SimpleMessageListenerContainer` 的父类实现了 `start` 方法，而在 `start` 方法中会调用 `SimpleMessageListenerContainer` 的 `doStart` 方法。
 2. `doStart` 中做了两件事，首先就是调用了 `initializeConsumers` 方法，对消费者进行初始化，生成了 `BlockingQueueConsumer`；然后，就是将 `BlockingQueueConsumer` 类型的消费者包装为实现了 `Runnable` 接口，可异步处理消息的 `AsyncMessageProcessingConsumer`，并丢进异步线程池中执行。
 3. 异步线程池会调用 `AsyncMessageProcessingConsumer` 的 `run` 方法。`run` 方法中，首先就是调用了 `initialize` 方法，`initialize` 主要的作用就是为客户端设置 Qos 以及消息订阅等操作，当 RabbitMQ 服务端收到客户端发送的指令后，会将消息推送给客户端，本质便是将消息缓存到队列中（`queue.offer()`）；第二个核心的操作就是 `mainLoop` 操作，`mainLoop` 外层通过一个 `while` 无限循环套用，它做的事情就是从队列 `queue` 拿消息（`queue.poll()`），并经过一系列操作最终传递并调用到用户实现的 `MessageListener` 的 `onMessage` 方法中。
+
 
 ### 5. MessageListenerAdapter
 <hr>
 
 <font color="orange"><b>MessageListenerAdapter 的基本使用</b></font>
 
-MessageListenerAdapter 即：消息监听适配器。话不多说，我们先来看一下它的基本使用：
+`MessageListenerAdapter` 即：消息监听适配器。话不多说，我们先来看一下它的基本使用：
 
 *MessageDelegate*
 ```java
@@ -2411,4 +2460,124 @@ public class MessageDelegate {
 2023-04-15 21:56:26.683  INFO 99952 --- [nectionFactory1] c.d.r.config.RabbitConfig                : correlationData : CorrelationData [id=deded32a-a28e-449e-8455-3a8f6ef5248b]
 ```
 
-如果在你的项目中，需要自定义消息转换器，那便可以通过实现 `MessageConverter` 接口，重写 `toMessage` 与 `fromMessage` 方法来完成。这部分内容就不再赘述了～ 
+如果在你的项目中，需要自定义消息转换器，那便可以通过实现 `MessageConverter` 接口，重写 `toMessage` 与 `fromMessage` 方法来完成。这部分内容就不再赘述了～
+
+### RabbitListener
+<hr>
+
+`RabbitListener` 是 Spring AMQP 消费者监听消息的终极方案，它的使用方法非常简单，我们仅需在消息处理类或指定方法上添加 `@RabbitListener` 注解即可。
+
+当 `@RabbitListener` 注解标注于方法之上时，该方法便是一个可用于消息监听的监听器；当 `@RabbitListener` 注解标注于类上，则需要同另一个注解 `@RabbitHandler` 一同配合使用。这种使用方式可用于实现监听不同队列，不同类型消息的处理，类中标注了 `@RabbitHandler` 的方法就是可用于消息监听的监听器。`RabbitListener` 基本上可以满足开发者 90% 以上的业务开发需求。
+
+关于 `RabbitListener` 的基本使用方法，因为文章篇幅限制，就不再赘述了，我们来重点探讨它的原理。
+
+<font color="orange"><b>RabbitListener 原理</b></font>
+
+<font color="blue">1.RabbitAutoConfiguration </font>
+
+我们应该都知道 Spring Boot 自动配置的原理——当 Spring Boot 项目启动时，会通过 `@EnableAutoConfiguration` 注解定位到 META-INF/spring.factories 文件中，并获取所有 `EnableAutoConfiguration` 属性的值。这些值便是 Spring Boot 要执行的自动配置类。这些配置类通常以 `XXXAutoConfiguration` 这种形式来命名的。
+
+`RabbitAutoConfiguration` 便是 Spring AMQP 的自动配置类：
+
+![](https://files.mdnice.com/user/19026/ae45ff98-fa97-42ea-8cac-e866d8dbad75.png)
+
+我来解释一下 `RabbitAutoConfiguration` 配置类上这些注解的含义:
+
+1. `@AutoConfiguration` 注解就不必多说了，它是自动配置注解。
+2. `@ConditionalOnClass` 注解是一个条件注解，其含义为当 ClassPath 路径下有指定类时，才会去扫描解析当前的自动配置类；所以，只有 ClassPath 路径下存在 `RabbitTemplate` 和 `Channel` 这两个类时，才会去扫描解析 `RabbitAutoConfiguration` 自动配置类。
+3. `@EnableConfigurationProperties` 注解的作用是使标注了 `@ConfigurationProperties` 注解的类生效；源代码的含义便是使 `RabbitProperties` 类生效，`RabbitProperties` 类上标注了 `@ConfigurationProperties` 注解，其作用是获取配置文件中所有以 `spring.rabbitmq` 的属性
+4. `@Import` 注解的作用是引入其他的配置类，源代码中，该注解引入了 `RabbitAnnotationDrivenConfiguration` 配置类。
+
+接下来，我们进入到 `RabbitAnnotationDrivenConfiguration` 配置类：
+
+![](https://files.mdnice.com/user/19026/c84f8efd-f0b2-441b-a451-79434c46570a.png)
+
+我们看到，在 `RabbitAnnotationDrivenConfiguration` 类上也有一个 `@ConditionalOnClass` 注解，其含义为当 ClassPath 路径下有指定类 `EnableRabbit` 时，才会去扫描解析当前的配置类。进入到 `EnableRabbit` 类：
+
+![](https://files.mdnice.com/user/19026/5790141a-83a3-4f58-9848-53db1c8ec0a3.png)
+
+我们可以看到 `EnableRabbit` 引入了 `RabbitListenerConfigurationSelector`，像这种 `XXXConfigurationSelector` 的主要作用是收集需要导入的配置类，进入到 `RabbitListenerConfigurationSelector`：
+![](https://files.mdnice.com/user/19026/5585bf5e-82e7-43d7-8e4e-e75b6ef621d2.png)
+
+`RabbitListenerConfigurationSelector` 的 `selectImports` 方法返回了一个字符串数组，该字符串数组中有两个配置类名，分别是 `RabbitBootstrapConfiguration` 与 `MultiRabbitBootstrapConfiguration`，这两个配置类便是 `EnableRabbit` 需要导入的配置类 ；进入到 `RabbitBootstrapConfiguration` 类中：
+
+![](https://files.mdnice.com/user/19026/b41b5491-d9ed-4840-81e1-43cf4b1b57a8.png)
+
+我们看到 `RabbitBootstrapConfiguration` 配置类的 `registerBeanDefinitions` 方法的逻辑就是向注册表注册两个 `BeanDefinition` 实例。
+
+`BeanDefinition` 就是对 `Bean` 的一个定义，它保存了关于一个 `Bean` 的各种信息，注册的过程就是将 `Bean` 定义为 `BeanDefinition`，然后放入至 Spring 容器中。
+
+而这两个 `BeanDefinition` 则是 `RabbitListenerAnnotationBeanPostProcessor` 和 `RabbitListenerEndpointRegistry`。
+
+<font color="blue">2.RabbitListenerAnnotationBeanPostProcessor</font>
+
+`BeanPostProcessor` 是 Spring 容器提供的一个重要接口。从字面的意思来看，`BeanPostProcessor` 翻译为 Bean 的后置处理器。当一个 Bean 实现了 `BeanPostProcessor` 接口，重写 `postProcessBeforeInitialization` 与 `postProcessAfterInitialization` 方法，就可以在 Bean 的初始化方法的前后，进行一些特殊的逻辑处理。
+
+`RabbitListenerAnnotationBeanPostProcessor` 便实现了 `BeanPostProcessor` 接口。
+
+先来看一下 `RabbitListenerAnnotationBeanPostProcessor` 的 `postProcessBeforeInitialization` 方法：
+
+![](https://files.mdnice.com/user/19026/626e11a0-80be-44be-88e2-8036385bba4e.png)
+
+我们看到，在该 Bean 初始化之前，`postProcessBeforeInitialization` 方法并未对其作任何处理。
+
+接着，我们来到 `postProcessAfterInitialization` 方法：
+
+![](https://files.mdnice.com/user/19026/53c84010-9d80-4285-8d42-93ff7087f67a.png)
+
+该方法中，重点的逻辑有三处，在上图中我已经使用红框圈出。
+
+第一处逻辑是 `buildMetadata` 方法，该方法我就不带领大家一起深入跟踪了。
+
+它的作用是对所有标注 `@RabbitListener` 注解的类与方法，以及标注了 `@RabbitHandle` 注解的方法进行获取解析，并封装到 `TypeMetadata`对象中，然后，将 `TypeMetadata` 对象交给 `processAmqpListener` 与 `processMultiMethodListeners` 方法处理。
+
+`processAmqpListener` 会对标注了 `@RabbitListener` 注解的方法进行解析；`processMultiMethodListeners` 则会对标注了 `@RabbitListener` 注解的类中，标注了 `@RabbitHandle` 注解的方法进行解析。这两个方法的逻辑大体相同，我们就来看下 `processAmqpListener` 方法：
+
+![](https://files.mdnice.com/user/19026/cf82e51f-5769-4845-bfbe-7d8db0d68a3a.png)
+
+在该方法中，首先调用了 `checkProxy` 方法，其作用是对 JDK 动态代理的情况进行检查，检查代理的目标接口是否含有对应方法；然后，便创建了一个 `MethodRabbitListenerEndpoint` 对象，将该对象与其他参数一同传入 `processListener` 方法。
+
+继续进入到 `processListener` 方法：
+
+![](https://files.mdnice.com/user/19026/2816861d-aa16-43ad-8371-8603fdddd5ca.png)
+
+`processListener` 方法前面的逻辑很简单，它会对 `@RabbitListener` 注解的属性进行校验，并设置到 `MethodRabbitListenerEndpoint` 对象中，最后它将调用上图红框中的逻辑 ：`this.registrar.registerEndpoint`，`registrar` 是 `RabbitListenerEndpointRegistrar` 类的对象。
+
+<font color="blue">3.RabbitListenerEndpointRegistrar</font>
+
+`RabbitListenerEndpointRegistrar` 是一个工具类，该类的说明中写道：`RabbitListenerEndpointRegistrar` 的作用是将 `RabbitListenerEndpoint` 注册到 `RabbitListenerEndpointRegistry` 中。
+
+进入到 `registerEndpoint` 方法：
+
+![](https://files.mdnice.com/user/19026/0f19c09b-16f5-45e7-aa29-320e0a2f0476.png)
+
+在该方法的逻辑中，首先会创建一个 `AmqpListenerEndpointDescriptor`对象，`AmqpListenerEndpointDescriptor` 是对 `MethodRabbitListenerEndpoint` 与 `RabbitListenerContainerFactory` 的封装。创建了该类的对象后，接着就来到了一个同步代码块中，由于 `startImmediately` 值为 `false`，所以同步代码块会走 `this.endpointDescriptors.add(descriptor)` 的逻辑。`endpointDescriptors` 是 `AmqpListenerEndpointDescriptor` 的 `List` 列表。
+
+`RabbitListenerEndpointRegistrar` 实现了 `InitializingBean` 接口，我们接下来看一下它的 `afterPropertiesSet` 初始化方法：
+
+![](https://files.mdnice.com/user/19026/7d83b5e2-5aad-4620-9c8e-622e441bb467.png)
+
+我们可以看到，在 `afterPropertiesSet` 初始化方法中，调用了 `registerAllEndpoints` 方法，`registerAllEndpoints` 方法中也有一个同步代码块，代码块中的逻辑为循环 `endpointDescriptors` 列表，然后调用 `this.endpointRegistry.registerListenerContainer` 这段逻辑；整个循环结束后，将 `startImmediately` 这一变量设置为 `true`。
+
+<font color="blue">4.RabbitListenerEndpointRegistry</font>
+
+接着，我们来到 `RabbitListenerEndpointRegistry` 类的 `registerListenerContainer` 方法：
+
+![](https://files.mdnice.com/user/19026/f76c9460-b938-42bc-9c79-6a24e7fbd78d.png)
+
+![](https://files.mdnice.com/user/19026/21e0aa13-c47a-43be-b594-8804bde425a2.png)
+
+该方法的主要作用便是为已经注册的 `RabbitListenerEndpoint` 创建 `MessageListenerContainer` 实例。
+
+`RabbitListenerEndpointRegistry` 实现了 `SmartLifecycle` 接口，那么自然地，我们就要去看一下它的 `start` 方法：
+
+![](https://files.mdnice.com/user/19026/46e392fe-3b51-44f9-9115-497fa3bdeda0.png)
+
+`start` 方法中调用了 `startIfNecessary` 方法，进入 `startIfNecessary` 方法：
+
+![](https://files.mdnice.com/user/19026/7d2475cb-27f6-49c6-bee2-f4aaa4216daf.png)
+
+最终，我们看到了，在 `startIfNecessary` 中，调用了 `MessageListenerContainer` 的 `start` 方法，而后面的内容，便衔接到了 `SimpleMessageListenerContainer` 原理的部分。
+
+至此，我们也终于明白了 `@RabbitListener` 注解其原理的精妙所在。
+

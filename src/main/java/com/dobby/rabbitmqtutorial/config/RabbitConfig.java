@@ -7,10 +7,12 @@ import com.dobby.rabbitmqtutorial.service.Consumer;
 import com.rabbitmq.client.Channel;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.*;
+import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.rabbit.listener.RabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import org.springframework.amqp.rabbit.listener.adapter.MessageListenerAdapter;
 import org.springframework.amqp.rabbit.listener.api.ChannelAwareMessageListener;
@@ -125,34 +127,11 @@ public class RabbitConfig {
         return rabbitTemplate;
     }
 
+
     @Bean
-    public SimpleMessageListenerContainer simpleMessageListenerContainer(ConnectionFactory connectionFactory) {
-        SimpleMessageListenerContainer messageListenerContainer = new SimpleMessageListenerContainer(connectionFactory);
-        // 设置监听队列
-        messageListenerContainer.setQueueNames(QUEUE);
-        // 设置消费者线程数量
-        messageListenerContainer.setConcurrentConsumers(3);
-        // 设置最大的消费者线程数量
-        messageListenerContainer.setMaxConcurrentConsumers(5);
-        // 消费端开启手动确认
-        messageListenerContainer.setAcknowledgeMode(AcknowledgeMode.MANUAL);
-
-//        messageListenerContainer.setMessageListener(new MessageListener() {
-//            @Override
-//            public void onMessage(Message message) {
-//                log.info("receive message:{}", message);
-//            }
-//        });
-        // messageListenerContainer.setMessageListener(new MyChannelAwareMessageListener());
-
-        // 消费端限流
-        messageListenerContainer.setPrefetchCount(20);
-        MessageListenerAdapter messageListenerAdapter = new MessageListenerAdapter();
-        Map<String, String> map = new HashMap<>(8);
-        map.put(QUEUE, "handle");
-        messageListenerAdapter.setQueueOrTagToMethodName(map);
-        // 设置代理
-        messageListenerAdapter.setDelegate(messageDelegate);
+    public RabbitListenerContainerFactory rabbitListenerContainerFactory(ConnectionFactory connectionFactory) {
+        SimpleRabbitListenerContainerFactory simpleRabbitListenerContainerFactory = new SimpleRabbitListenerContainerFactory();
+        simpleRabbitListenerContainerFactory.setConnectionFactory(connectionFactory);
         // 设置消息转换器
         Jackson2JsonMessageConverter jackson2JsonMessageConverter = new Jackson2JsonMessageConverter("*");
         jackson2JsonMessageConverter.setClassMapper(new ClassMapper() {
@@ -166,9 +145,54 @@ public class RabbitConfig {
                 return Order.class;
             }
         });
-        messageListenerAdapter.setMessageConverter(jackson2JsonMessageConverter);
-        messageListenerContainer.setMessageListener(messageListenerAdapter);
-        return messageListenerContainer;
+        simpleRabbitListenerContainerFactory.setMessageConverter(jackson2JsonMessageConverter);
+        return simpleRabbitListenerContainerFactory;
     }
+
+//    @Bean
+//    public SimpleMessageListenerContainer simpleMessageListenerContainer(ConnectionFactory connectionFactory) {
+//        SimpleMessageListenerContainer messageListenerContainer = new SimpleMessageListenerContainer(connectionFactory);
+//        // 设置监听队列
+//        messageListenerContainer.setQueueNames(QUEUE);
+//        // 设置消费者线程数量
+//        messageListenerContainer.setConcurrentConsumers(3);
+//        // 设置最大的消费者线程数量
+//        messageListenerContainer.setMaxConcurrentConsumers(5);
+//        // 消费端开启手动确认
+//        messageListenerContainer.setAcknowledgeMode(AcknowledgeMode.MANUAL);
+//
+////        messageListenerContainer.setMessageListener(new MessageListener() {
+////            @Override
+////            public void onMessage(Message message) {
+////                log.info("receive message:{}", message);
+////            }
+////        });
+//        // messageListenerContainer.setMessageListener(new MyChannelAwareMessageListener());
+//
+//        // 消费端限流
+//        messageListenerContainer.setPrefetchCount(20);
+//        MessageListenerAdapter messageListenerAdapter = new MessageListenerAdapter();
+//        Map<String, String> map = new HashMap<>(8);
+//        map.put(QUEUE, "handle");
+//        messageListenerAdapter.setQueueOrTagToMethodName(map);
+//        // 设置代理
+//        messageListenerAdapter.setDelegate(messageDelegate);
+//        // 设置消息转换器
+//        Jackson2JsonMessageConverter jackson2JsonMessageConverter = new Jackson2JsonMessageConverter("*");
+//        jackson2JsonMessageConverter.setClassMapper(new ClassMapper() {
+//            @Override
+//            public void fromClass(Class<?> clazz, MessageProperties properties) {
+//
+//            }
+//
+//            @Override
+//            public Class<?> toClass(MessageProperties properties) {
+//                return Order.class;
+//            }
+//        });
+//        messageListenerAdapter.setMessageConverter(jackson2JsonMessageConverter);
+//        messageListenerContainer.setMessageListener(messageListenerAdapter);
+//        return messageListenerContainer;
+//    }
 
 }
